@@ -202,7 +202,6 @@ cython_debug/
 .cursorindexingignore
 
 # IDE / editor config
-.claude/
 .idea/
 .vscode/
 
