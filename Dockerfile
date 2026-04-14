@@ -5,6 +5,12 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PORT=8080
 
+# curl-cffi needs these C libraries at runtime to build its curl bindings
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcurl4 \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --uid 1000 app
 
 WORKDIR /app
