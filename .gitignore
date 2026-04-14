@@ -201,6 +201,10 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# IDE / editor config
+.idea/
+.vscode/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
