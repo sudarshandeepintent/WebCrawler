@@ -15,10 +15,13 @@ def create_app() -> FastAPI:
     if settings.cors_origins:
         origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
         if origins:
+            # allow_credentials must be False when allow_origins contains "*"
+            # (Starlette raises ValueError otherwise)
+            wildcard = origins == ["*"]
             app.add_middleware(
                 CORSMiddleware,
                 allow_origins=origins,
-                allow_credentials=True,
+                allow_credentials=not wildcard,
                 allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
                 allow_headers=["*"],
             )
