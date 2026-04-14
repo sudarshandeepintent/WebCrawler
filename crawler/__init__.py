@@ -1,6 +1,7 @@
-from crawler.crawl_workflow import crawl_url
-from crawler.html_metadata import parse_page
-from crawler.http_fetch import fetch_page
-from crawler.topic_scoring import classify_page
+from crawler.services.batch_service import crawl_batch
+from crawler.services.crawl_service import crawl_url, fetch_page
 
-__all__ = ["fetch_page", "parse_page", "classify_page", "crawl_url"]
+from crawler.classification.topics import classify_page
+from crawler.parsing.extract import parse_page
+
+__all__ = ["classify_page", "crawl_batch", "crawl_url", "fetch_page", "parse_page"]

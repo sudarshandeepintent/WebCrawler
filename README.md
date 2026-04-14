@@ -21,6 +21,27 @@ curl -X POST http://localhost:8000/crawl \
 
 API docs: http://127.0.0.1:8000/docs
 
+## Layout (prod-ish)
+
+| path | role |
+|------|------|
+| `main.py` | entrypoint, `app = create_app()` |
+| `crawler/app_factory.py` | **Factory**: builds FastAPI + middleware |
+| `crawler/api/routes.py` | routes only |
+| `crawler/config/settings.py` | env (`REDIS_URL`, `CORS_ORIGINS`, cache ttl, `static_dir`) |
+| `crawler/domain/` | `FetchResult`, `UpstreamCrawlError` |
+| `crawler/models/schemas.py` | pydantic request/response DTOs |
+| `crawler/adapters/http_sync.py` | **Strategy**: curl-cffi vs httpx sync |
+| `crawler/adapters/http_async.py` | same idea, async batch path |
+| `crawler/parsing/extract.py` | HTML → metadata |
+| `crawler/classification/topics.py` | topics / category |
+| `crawler/services/` | **Facade**: `crawl_service`, `batch_service` |
+| `crawler/infrastructure/cache.py` | memory or Redis |
+
+Shallow files like `crawler/http_fetch.py` / `crawler/schemas.py` are thin re-exports so older import paths still work.
+
+**Patterns:** Factory (`create_app`), Strategy (fetch implementations), Facade (`crawl_url` = fetch + parse + classify), DTOs (pydantic models).
+
 ### Dev (tests)
 
 ```bash
@@ -97,4 +118,4 @@ Leave `CORS_ORIGINS` unset if the browser only talks to the same Cloud Run URL a
 
 - Image runs as non-root user `app`, listens on `$PORT` (Cloud Run sets this).
 - Uvicorn uses `--proxy-headers` so HTTPS URLs behind Google’s load balancer stay correct.
-- Crawl `timeout` in JSON is capped between **1** and **120** seconds (`crawler/schemas.py`).
+- Crawl `timeout` in JSON is capped between **1** and **120** seconds (`crawler/models/schemas.py`).

@@ -162,7 +162,7 @@ class TestAPI:
         assert client.get("/health").json()["status"] == "ok"
 
     def test_crawl_success(self):
-        with patch("crawler.crawl_workflow.fetch_page", return_value=_fetch_fixture()):
+        with patch("crawler.services.crawl_service.fetch_page", return_value=_fetch_fixture()):
             r = client.post("/crawl", json={"url": "https://example.com/python-tutorial"})
         assert r.status_code == 200
         data = r.json()
@@ -172,7 +172,7 @@ class TestAPI:
 
     def test_crawl_network_error(self):
         err = FetchResult("https://bad.example.com", "https://bad.example.com", 0, "", "", error="Connection refused")
-        with patch("crawler.crawl_workflow.fetch_page", return_value=err):
+        with patch("crawler.services.crawl_service.fetch_page", return_value=err):
             assert client.post("/crawl", json={"url": "https://bad.example.com"}).status_code == 502
 
     def test_crawl_404(self):
@@ -183,14 +183,14 @@ class TestAPI:
             "<html><body>Not Found</body></html>",
             "text/html",
         )
-        with patch("crawler.crawl_workflow.fetch_page", return_value=not_found):
+        with patch("crawler.services.crawl_service.fetch_page", return_value=not_found):
             assert client.post("/crawl", json={"url": "https://example.com/gone"}).status_code == 404
 
     def test_invalid_url(self):
         assert client.post("/crawl", json={"url": "not-a-url"}).status_code == 422
 
     def test_response_schema(self):
-        with patch("crawler.crawl_workflow.fetch_page", return_value=_fetch_fixture()):
+        with patch("crawler.services.crawl_service.fetch_page", return_value=_fetch_fixture()):
             data = client.post("/crawl", json={"url": "https://example.com/python-tutorial"}).json()
         for field in [
             "url",
