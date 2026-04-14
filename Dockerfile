@@ -5,6 +5,11 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PORT=8080
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcurl4 \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --uid 1000 app
 
 WORKDIR /app
@@ -21,5 +26,4 @@ USER app
 
 EXPOSE 8080
 
-# Cloud Run sets PORT; proxy headers so scheme/client behind GCP load balancer stay correct
 CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT} --proxy-headers '--forwarded-allow-ips=*'"]

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 class CrawlRequest(BaseModel):
     url: HttpUrl
-    timeout: float = Field(default=15.0, ge=1.0, le=120.0)
+    timeout: float = Field(default=45.0, ge=1.0, le=120.0)
     follow_redirects: bool = True
 
 

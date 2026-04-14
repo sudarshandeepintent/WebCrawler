@@ -3,120 +3,179 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 from typing import Dict, List, Tuple
+from urllib.parse import urlparse
 
 from crawler.schemas import PageMetadata
 
-# rough topic buckets — tune as you like
 TOPIC_KEYWORDS: Dict[str, List[str]] = {
     "technology": [
-        "software", "hardware", "computer", "programming", "developer",
-        "code", "algorithm", "database", "cloud", "api", "machine learning",
-        "artificial intelligence", "ai", "cybersecurity", "blockchain",
-        "javascript", "python", "startup", "tech", "digital", "internet",
-        "network", "server", "data science", "open source",
+        "software", "hardware", "programming", "developer", "codebase",
+        "algorithm", "database", "cloud computing", "api", "machine learning",
+        "artificial intelligence", "cybersecurity", "blockchain",
+        "javascript", "python", "typescript", "startup", "tech stack",
+        "open source", "repository", "devops", "microservice", "framework",
+        "deployment", "kubernetes", "docker",
+    ],
+    "outdoors": [
+        "hiking", "camping", "backpacking", "trail", "outdoor", "wilderness",
+        "mountain", "summit", "forest", "nature", "wildlife", "tent",
+        "campfire", "kayak", "canoe", "climbing", "gear", "trek", "expedition",
+        "national park", "scenic", "campsite", "trailhead", "wildflower",
+        "sunrise hike", "backpack",
     ],
     "healthcare": [
-        "health", "medical", "doctor", "hospital", "patient", "disease",
-        "treatment", "medicine", "clinical", "drug", "symptom", "diagnosis",
+        "medical", "doctor", "hospital", "patient", "disease",
+        "treatment", "medicine", "clinical trial", "prescription", "diagnosis",
         "surgery", "therapy", "vaccine", "pharmaceutical", "nurse",
-        "mental health", "wellness", "nutrition", "fitness",
+        "mental health", "wellness", "chronic", "symptom", "specialist",
+        "telemedicine", "healthcare provider",
     ],
     "finance": [
-        "finance", "investment", "stock", "market", "economy", "bank",
-        "trading", "revenue", "profit", "loss", "portfolio", "fund",
-        "mortgage", "loan", "interest rate", "inflation", "cryptocurrency",
-        "bitcoin", "fintech", "accounting", "tax", "insurance",
+        "investment", "stock market", "equity", "portfolio", "hedge fund",
+        "trading", "revenue", "profit margin", "cryptocurrency", "bitcoin",
+        "fintech", "accounting", "tax return", "insurance premium",
+        "interest rate", "inflation", "bond", "dividend", "ipo",
+        "venture capital", "balance sheet", "fiscal",
     ],
     "e-commerce": [
-        "buy", "shop", "cart", "checkout", "product", "price", "discount",
-        "sale", "shipping", "delivery", "order", "payment", "store",
-        "purchase", "add to cart", "wishlist", "review", "rating",
-        "merchandise", "retail", "warehouse",
+        "add to cart", "buy now", "checkout page", "shopping cart", "wishlist",
+        "free shipping", "discount code", "promo code", "sale price",
+        "sold out", "in stock", "payment gateway", "refund policy",
+        "easy returns", "online store", "marketplace listing", "cart total",
+        "subscription plan", "quantity in stock",
     ],
     "news": [
-        "breaking news", "latest news", "reporter", "journalist", "press",
-        "headline", "editorial", "opinion", "article", "story", "report",
-        "correspondent", "publication", "broadcast", "media",
+        "breaking news", "journalist", "press release", "headline",
+        "correspondent", "broadcast", "wire service", "newsroom",
+        "byline", "exclusive interview", "investigative report", "scoop",
+        "editor in chief", "news anchor", "live coverage", "news brief",
     ],
     "education": [
         "learn", "course", "tutorial", "university", "college", "school",
         "student", "teacher", "curriculum", "lecture", "exam", "degree",
-        "education", "training", "certification", "scholarship", "study",
-        "knowledge", "academic",
+        "certification", "scholarship", "academic", "classroom",
+        "e-learning", "syllabus", "homework", "campus",
     ],
     "entertainment": [
-        "movie", "film", "music", "song", "album", "artist", "concert",
-        "television", "tv", "show", "series", "game", "gaming", "video",
-        "streaming", "podcast", "celebrity", "entertainment", "comedy",
-        "drama", "thriller",
+        "movie", "film", "music album", "concert", "television series",
+        "streaming", "podcast", "celebrity", "box office", "trailer",
+        "gaming", "video game", "esports", "comedy show", "thriller",
+        "box set", "soundtrack", "award show",
     ],
     "travel": [
-        "travel", "destination", "hotel", "flight", "vacation", "trip",
-        "tour", "tourism", "passport", "visa", "airline", "booking",
-        "resort", "beach", "adventure", "explore", "itinerary", "guide",
+        "destination", "hotel", "flight", "vacation", "itinerary",
+        "tourism", "passport", "visa", "airline", "resort", "beach",
+        "cruise", "travel guide", "booking", "hostel", "sightseeing",
+        "travel insurance", "layover", "round trip",
     ],
     "sports": [
-        "sport", "football", "soccer", "basketball", "baseball", "tennis",
-        "golf", "cricket", "rugby", "athlete", "team", "championship",
-        "league", "score", "match", "tournament", "olympic", "coach",
-        "player", "stadium",
+        "football", "soccer", "basketball", "baseball", "tennis",
+        "golf", "cricket", "rugby", "athlete", "championship",
+        "league standings", "tournament bracket", "olympic games",
+        "transfer window", "locker room", "halftime", "penalty kick",
+        "grand slam", "world cup",
     ],
     "politics": [
-        "politics", "government", "election", "president", "congress",
-        "senate", "democrat", "republican", "policy", "law", "vote",
-        "parliament", "minister", "party", "legislation", "campaign",
-        "diplomacy", "democracy",
+        "election", "president", "congress", "senate",
+        "democrat", "republican", "legislation", "campaign",
+        "diplomacy", "democracy", "political party", "ballot",
+        "filibuster", "geopolitics", "foreign policy", "referendum",
+        "parliament", "prime minister", "caucus",
     ],
     "science": [
-        "research", "scientist", "experiment", "study", "physics",
-        "chemistry", "biology", "astronomy", "climate", "environment",
-        "ecology", "gene", "dna", "evolution", "discovery", "laboratory",
-        "hypothesis", "theory", "space", "nasa",
+        "research", "scientist", "experiment", "hypothesis",
+        "physics", "chemistry", "biology", "astronomy",
+        "climate change", "ecology", "genome", "dna sequencing",
+        "evolution", "laboratory", "peer review", "scientific paper",
+        "nasa", "quantum", "neuroscience",
     ],
     "food": [
-        "food", "recipe", "cook", "restaurant", "cuisine", "ingredient",
-        "meal", "diet", "nutrition", "chef", "taste", "flavor", "bake",
-        "grill", "vegan", "vegetarian", "organic", "menu",
+        "recipe", "cook", "restaurant", "cuisine", "ingredient",
+        "meal prep", "diet plan", "chef", "flavor profile", "bake",
+        "grill", "vegan", "vegetarian", "organic produce", "appetizer",
+        "entree", "dessert", "food pairing", "culinary",
     ],
     "real-estate": [
-        "real estate", "property", "house", "apartment", "rent", "lease",
-        "mortgage", "listing", "realtor", "agent", "neighborhood", "home",
-        "buy house", "sell house", "square feet", "bedroom", "bathroom",
+        "real estate", "property listing", "apartment", "rent",
+        "lease agreement", "mortgage rate", "realtor", "mls listing",
+        "neighborhood", "square footage", "bedroom", "bathroom",
+        "open house", "closing costs", "down payment", "hoa",
     ],
     "automotive": [
-        "car", "truck", "vehicle", "engine", "horsepower", "electric vehicle",
-        "ev", "tesla", "dealership", "driving", "fuel", "hybrid",
-        "transmission", "suv", "sedan", "automobile",
+        "car review", "truck", "electric vehicle", "engine specs",
+        "horsepower", "ev range", "dealership", "test drive",
+        "fuel economy", "hybrid", "transmission", "suv", "sedan",
+        "recalls", "vin", "mpg", "torque", "powertrain",
     ],
     "fashion": [
-        "fashion", "style", "clothing", "outfit", "designer", "brand",
-        "trend", "model", "luxury", "apparel", "wardrobe", "collection",
-        "dress", "shoes", "accessories",
+        "fashion week", "designer", "luxury brand", "wardrobe",
+        "apparel", "runway", "haute couture", "streetwear", "lookbook",
+        "capsule collection", "accessories", "handbag", "sneakers",
+        "sustainable fashion", "outfit ideas",
     ],
 }
 
+MIN_SCORE = 0.08
 
-def _kw_index() -> Dict[str, List[str]]:
-    out: Dict[str, List[str]] = {}
+
+def _build_kw_index() -> Dict[str, List[str]]:
+    idx: Dict[str, List[str]] = {}
     for topic, kws in TOPIC_KEYWORDS.items():
         for kw in kws:
-            out.setdefault(kw, []).append(topic)
-    return out
+            idx.setdefault(kw, []).append(topic)
+    return idx
 
 
-_KW_TO_TOPICS = _kw_index()
+_KW_TO_TOPICS: Dict[str, List[str]] = _build_kw_index()
 
-_CATEGORY_SIGNALS: Dict[str, List[str]] = {
-    "e-commerce": ["add to cart", "buy now", "checkout", "shopping cart", "wishlist"],
-    "news": ["breaking", "exclusive", "published", "by staff", "wire"],
-    "blog": ["posted by", "comments", "tags:", "filed under", "subscribe"],
-    "documentation": ["api reference", "getting started", "installation", "usage", "parameters"],
-    "landing-page": ["get started", "sign up", "free trial", "learn more", "contact us"],
-    "forum": ["reply", "thread", "post", "moderator", "upvote"],
-    "search-results": ["results for", "did you mean", "showing", "of results"],
-    "profile": ["followers", "following", "bio", "tweet", "timeline"],
-    "video": ["watch", "subscribe", "channel", "views", "like", "share"],
-}
+
+def _exclusivity_weight(kw: str) -> float:
+    # rarer keywords across topics = higher weight
+    n = len(_KW_TO_TOPICS.get(kw, []))
+    if n == 1:
+        return 3.0
+    if n == 2:
+        return 1.0
+    return 0.4
+
+
+_CATEGORY_SIGNALS: List[Tuple[str, List[str]]] = [
+    ("e-commerce", ["add to cart", "buy now", "shopping cart", "checkout", "wishlist"]),
+    ("documentation", [
+        "api reference", "getting started", "installation guide", "code sample",
+        "parameters", "return value",
+    ]),
+    ("forum", ["reply to thread", "upvote", "moderator", "mark as answer"]),
+    ("search-results", ["results for", "did you mean", "showing results", "no results found"]),
+    ("landing-page", ["sign up for free", "request a demo", "start free trial"]),
+    ("news", [
+        "breaking news", "wire service", "live coverage", "press release",
+        "newsroom", "byline",
+    ]),
+    ("profile", ["unfollow", "your followers", "edit profile", "profile picture"]),
+    ("video", ["subscribe to channel", "video player", "watch full episode"]),
+    ("blog", ["posted by", "filed under", "leave a comment", "tags:"]),
+]
+
+_URL_PATH_HINTS: List[Tuple[str, str]] = [
+    (r"/blog/",        "blog"),
+    (r"/news/",        "news"),
+    (r"/shop/",        "e-commerce"),
+    (r"/store/",       "e-commerce"),
+    (r"/product/",     "e-commerce"),
+    (r"/docs/",        "documentation"),
+    (r"/documentation/","documentation"),
+    (r"/wiki/",        "documentation"),
+    (r"/forum/",       "forum"),
+    (r"/profile/",     "profile"),
+    (r"/video/",       "video"),
+    (r"/watch/",       "video"),
+    (r"/recipe/",      "food"),
+    (r"/camp/",        "outdoors"),
+    (r"/hike/",        "outdoors"),
+    (r"/trail/",       "outdoors"),
+    (r"/travel/", "travel"),
+]
 
 
 def _tokenize(text: str) -> List[str]:
@@ -127,29 +186,43 @@ def _tokenize(text: str) -> List[str]:
     return toks + bi + tri
 
 
-def _score_topics(freq: Counter) -> Dict[str, float]:
-    hits: Dict[str, float] = defaultdict(float)
-    for tok, c in freq.items():
-        for topic in _KW_TO_TOPICS.get(tok, ()):
-            hits[topic] += c
+def _score_topics(freq: Counter, total_tokens: int) -> Dict[str, float]:
+    SCALE = 5000
+    if total_tokens == 0:
+        return {}
+
+    weighted_hits: Dict[str, float] = defaultdict(float)
+    for tok, count in freq.items():
+        topics_for_tok = _KW_TO_TOPICS.get(tok)
+        if not topics_for_tok:
+            continue
+        tf = count / total_tokens
+        w  = _exclusivity_weight(tok)
+        for topic in topics_for_tok:
+            weighted_hits[topic] += tf * w * SCALE
+
     out: Dict[str, float] = {}
-    for topic, h in hits.items():
-        if h > 0:
-            out[topic] = round(h / len(TOPIC_KEYWORDS[topic]), 4)
+    for topic, total in weighted_hits.items():
+        raw = total / len(TOPIC_KEYWORDS[topic])
+        out[topic] = round(min(raw, 1.0), 4)
     return out
 
 
-def _guess_category(body: str, top: List[str]) -> str:
-    for cat, needles in _CATEGORY_SIGNALS.items():
-        if any(n in body for n in needles):
+def _guess_category(url: str, body_lower: str, title: str, top_topics: List[str]) -> str:
+    path = urlparse(url).path.lower()
+    for pattern, cat in _URL_PATH_HINTS:
+        if re.search(pattern, path):
             return cat
-    if top:
-        return top[0]
-    return "general"
+
+    scan_text = title.lower() + " " + body_lower
+    for cat, needles in _CATEGORY_SIGNALS:
+        if any(needle in scan_text for needle in needles):
+            return cat
+
+    return top_topics[0] if top_topics else "general"
 
 
 def classify_page(meta: PageMetadata) -> PageMetadata:
-    # title/desc weighted a bit more than body — stops giant footers from steering everything
     chunks: List[str] = []
     if meta.title:
         chunks += [meta.title] * 5
@@ -164,15 +237,26 @@ def classify_page(meta: PageMetadata) -> PageMetadata:
         chunks.append(meta.body_text)
 
     blob = " ".join(chunks)
-    freq = Counter(_tokenize(blob))
-    scores = _score_topics(freq)
-    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    topics = [t for t, s in ranked if s > 0]
+    tokens = _tokenize(blob)
+    freq = Counter(tokens)
+    scores = _score_topics(freq, total_tokens=len(tokens))
 
-    body_l = (meta.body_text or "").lower()
-    cat = _guess_category(body_l, topics)
+    ranked = sorted(
+        ((t, s) for t, s in scores.items() if s >= MIN_SCORE),
+        key=lambda x: x[1],
+        reverse=True,
+    )
+
+    topics = [t for t, _ in ranked]
+    body_lower = (meta.body_text or "").lower()
+    category = _guess_category(
+        meta.final_url or meta.url,
+        body_lower,
+        title=meta.title or "",
+        top_topics=topics,
+    )
 
     meta.topics = topics
-    meta.topic_scores = {t: s for t, s in ranked if s > 0}
-    meta.page_category = cat
+    meta.topic_scores = {t: s for t, s in ranked}
+    meta.page_category = category
     return meta

@@ -9,7 +9,6 @@ from bs4 import BeautifulSoup, NavigableString, Tag
 from crawler.http_fetch import FetchResult
 from crawler.schemas import ImageInfo, LinkInfo, PageMetadata
 
-# noise for main text pass
 _SKIP = {"script", "style", "noscript", "head", "meta", "link", "header", "footer", "nav", "aside"}
 
 
