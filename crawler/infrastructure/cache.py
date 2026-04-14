@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 def _url_key(url: str) -> str:
+    # hash the URL so keys are always a fixed length regardless of how long or
+    # query-string-heavy the URL is. the prefix lets me clear only my keys in Redis
+    # without nuking anything else that might be in the same database.
     return settings.cache_prefix + hashlib.sha256(url.encode()).hexdigest()
 
 
@@ -24,28 +27,38 @@ def _now_iso() -> str:
 
 
 class _MemEntry:
+    # lightweight slot class to avoid dict overhead per entry.
+    # storing serialized JSON rather than the PageMetadata object itself
+    # means I don't have to worry about mutation — each get() deserializes fresh.
     __slots__ = ("data", "expires_at", "cached_at")
 
     def __init__(self, data: str, ttl: int) -> None:
         self.data = data
         self.cached_at = _now_iso()
-        self.expires_at = time.monotonic() + ttl
+        self.expires_at = time.monotonic() + ttl  # monotonic so clock adjustments don't affect TTL
 
 
 class MemoryCache:
+    # in-process LRU cache backed by OrderedDict.
+    # OrderedDict preserves insertion order and has O(1) move_to_end,
+    # which is exactly what I need for LRU without any extra library.
     def __init__(self, ttl: int | None = None, max_size: int | None = None) -> None:
         self._ttl = ttl if ttl is not None else settings.cache_ttl
         self._max = max_size if max_size is not None else settings.cache_max
         self._store: OrderedDict[str, _MemEntry] = OrderedDict()
-        self._lock = threading.Lock()
+        self._lock = threading.Lock()  # FastAPI runs handlers in threads, so this matters
 
     def _sweep(self) -> None:
+        # remove all expired entries in one pass.
+        # called inside set() so stale entries don't sit around taking up slots.
         now = time.monotonic()
         dead = [k for k, v in self._store.items() if v.expires_at <= now]
         for k in dead:
             del self._store[k]
 
     def _trim(self) -> None:
+        # evict from the front (least recently used) until we're under max_size.
+        # move_to_end on every get() keeps the most-recently-used entries at the back.
         while len(self._store) >= self._max:
             self._store.popitem(last=False)
 
@@ -58,7 +71,7 @@ class MemoryCache:
             if ent.expires_at <= time.monotonic():
                 del self._store[key]
                 return None
-            self._store.move_to_end(key)
+            self._store.move_to_end(key)  # mark as recently used
             meta = PageMetadata.model_validate_json(ent.data)
             meta.from_cache = True
             meta.cached_at = ent.cached_at
@@ -67,8 +80,8 @@ class MemoryCache:
     def set(self, url: str, meta: PageMetadata) -> None:
         key = _url_key(url)
         with self._lock:
-            self._sweep()
-            self._trim()
+            self._sweep()   # clean up expired entries before checking space
+            self._trim()    # then evict if still over max
             self._store[key] = _MemEntry(meta.model_dump_json(), self._ttl)
             self._store.move_to_end(key)
 
@@ -82,7 +95,7 @@ class MemoryCache:
 
     def stats(self) -> CacheStatsResponse:
         with self._lock:
-            self._sweep()
+            self._sweep()  # sweep before counting so expired entries don't inflate the number
             return CacheStatsResponse(
                 backend="memory",
                 entries=len(self._store),
@@ -92,12 +105,16 @@ class MemoryCache:
 
 
 class RedisCache:
+    # Redis-backed cache for production / multi-instance deployments.
+    # with Cloud Run potentially running multiple containers, MemoryCache means
+    # each instance has its own isolated cache. Redis fixes that — one shared
+    # cache across all instances, and it survives redeployments too.
     def __init__(self, redis_url: str, ttl: int | None = None) -> None:
         import redis
 
         self._ttl = ttl if ttl is not None else settings.cache_ttl
         self._client = redis.Redis.from_url(redis_url, decode_responses=True)
-        self._client.ping()
+        self._client.ping()  # fail fast at startup rather than on the first real request
         logger.info("redis cache ok %s", redis_url)
 
     def get(self, url: str) -> Optional[PageMetadata]:
@@ -111,6 +128,7 @@ class RedisCache:
         return meta
 
     def set(self, url: str, meta: PageMetadata) -> None:
+        # setex handles the TTL server-side — no need to sweep/trim like in MemoryCache
         payload = json.dumps({"meta": meta.model_dump(), "cached_at": _now_iso()})
         self._client.setex(_url_key(url), self._ttl, payload)
 
@@ -118,6 +136,7 @@ class RedisCache:
         self._client.delete(_url_key(url))
 
     def clear(self) -> None:
+        # only delete keys with my prefix, not everything in the database
         pat = settings.cache_prefix + "*"
         keys = self._client.keys(pat)
         if keys:
@@ -130,6 +149,9 @@ class RedisCache:
 
 
 def _make_cache() -> MemoryCache | RedisCache:
+    # try Redis first if REDIS_URL is configured. if the connection fails for
+    # any reason (bad URL, network issue, wrong password) just fall back to
+    # memory so the app still starts rather than crashing on boot.
     if settings.redis_url:
         try:
             return RedisCache(settings.redis_url)

@@ -19,16 +19,21 @@ async def _one(
     follow_redirects: bool,
     semaphore: asyncio.Semaphore,
 ) -> BatchResultItem:
+    # check cache before acquiring the semaphore — cached URLs don't count
+    # against the concurrency limit and return immediately without any network call.
     hit = cache.get(url)
     if hit is not None:
         return BatchResultItem(url=url, status=UrlStatus.cached, data=hit)
 
+    # semaphore limits how many fetches run in parallel. without this, submitting
+    # 50 URLs at once could hammer servers and trigger rate limits.
     async with semaphore:
         fr = await async_fetch_page(url, timeout=timeout, follow_redirects=follow_redirects)
 
     if fr.error:
         return BatchResultItem(url=url, status=UrlStatus.error, error=fr.error)
 
+    # same soft-error handling as the single crawl — parse what we can
     if fr.status_code in _SOFT and fr.html.strip():
         meta = classify_page(parse_page(fr))
         note = f"[http {fr.status_code}] gated — parsed what we got."
@@ -53,9 +58,14 @@ async def crawl_batch(
 ) -> BatchCrawlResponse:
     t0 = time.perf_counter()
     sem = asyncio.Semaphore(concurrency)
+
+    # asyncio.gather preserves order — result[i] always corresponds to urls[i].
+    # this is important so the UI can display results in the same order as input.
     tasks = [_one(u, timeout, follow_redirects, sem) for u in urls]
     raw = await asyncio.gather(*tasks, return_exceptions=True)
 
+    # return_exceptions=True means a crash in one task doesn't cancel the others.
+    # I convert exceptions to error items here so the response is always complete.
     out: List[BatchResultItem] = []
     for u, item in zip(urls, raw):
         if isinstance(item, Exception):
@@ -63,7 +73,7 @@ async def crawl_batch(
         else:
             out.append(item)
 
-    ok = sum(1 for r in out if r.status == UrlStatus.ok)
+    ok  = sum(1 for r in out if r.status == UrlStatus.ok)
     mem = sum(1 for r in out if r.status == UrlStatus.cached)
     bad = sum(1 for r in out if r.status == UrlStatus.error)
 
