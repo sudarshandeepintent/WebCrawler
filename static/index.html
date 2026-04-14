@@ -717,7 +717,7 @@ document.getElementById("batch-form").addEventListener("submit", async e => {
         const rawHTML = `<div class="json-out"><pre>${esc(JSON.stringify(d, null, 2))}</pre></div>`;
 
         detailHTML = `
-          <div class="batch-detail" onclick="event.stopPropagation()">
+          <div class="batch-detail">
             <div class="batch-tabs">
               <div class="batch-tab active" data-bidx="${idx}" data-btab="overview">Overview</div>
               <div class="batch-tab" data-bidx="${idx}" data-btab="topics">Topics</div>
@@ -763,25 +763,22 @@ document.getElementById("batch-form").addEventListener("submit", async e => {
    Batch item expand / collapse + tab switching
 ────────────────────────────────────────────────────────────── */
 document.getElementById("batch-list").addEventListener("click", e => {
-  /* Tab click — switch panel, don't toggle item */
+  /* Tab click — switch panel */
   const tab = e.target.closest(".batch-tab");
   if (tab) {
-    e.stopPropagation();
     const idx  = tab.dataset.bidx;
     const name = tab.dataset.btab;
-    /* deactivate sibling tabs */
     tab.closest(".batch-tabs").querySelectorAll(".batch-tab").forEach(t => t.classList.remove("active"));
     tab.classList.add("active");
-    /* deactivate sibling panels */
     tab.closest(".batch-detail").querySelectorAll(".batch-panel").forEach(p => p.classList.remove("active"));
     document.getElementById(`bp-${idx}-${name}`).classList.add("active");
     return;
   }
-  /* Item header click — toggle expand */
+  /* Any click inside the open detail panel (links, text, etc.) — don't collapse the item */
+  if (e.target.closest(".batch-detail")) return;
+  /* Item header click — toggle expand/collapse */
   const item = e.target.closest(".batch-item[data-bidx]");
-  if (item) {
-    item.classList.toggle("open");
-  }
+  if (item) item.classList.toggle("open");
 });
 
 /* ──────────────────────────────────────────────────────────────
