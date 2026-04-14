@@ -53,6 +53,7 @@ class PageMetadata(BaseModel):
 
     from_cache: bool = False
     cached_at: Optional[str] = None
+    fetch_duration_seconds: Optional[float] = None
 
 
 class BatchCrawlRequest(BaseModel):
