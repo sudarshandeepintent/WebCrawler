@@ -196,7 +196,9 @@
       border-radius: var(--radius); padding: 0.75rem 1rem;
       margin-bottom: 0.6rem;
       display: flex; gap: 0.75rem; align-items: flex-start;
+      cursor: pointer; transition: border-color .15s;
     }
+    .batch-item:hover { border-color: var(--accent); }
     .batch-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
     .dot-ok     { background: var(--accent2); }
     .dot-cached { background: var(--accent); }
@@ -204,6 +206,16 @@
     .batch-url  { font-size: 0.8rem; color: var(--muted); word-break: break-all; }
     .batch-title{ font-size: 0.9rem; font-weight: 600; margin-bottom: 0.15rem; }
     .batch-meta { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.35rem; }
+    .batch-chevron { margin-left: auto; flex-shrink: 0; color: var(--muted); transition: transform .2s; padding-top: 2px; user-select: none; }
+    .batch-item.open .batch-chevron { transform: rotate(180deg); }
+    .batch-detail { display: none; border-top: 1px solid var(--border); margin-top: 0.65rem; padding-top: 0.65rem; }
+    .batch-item.open .batch-detail { display: block; }
+    .batch-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 0.65rem; }
+    .batch-tab { padding: 0.38rem 0.7rem; cursor: pointer; color: var(--muted); font-size: 0.82rem; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .batch-tab:hover { color: var(--text); }
+    .batch-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .batch-panel { display: none; }
+    .batch-panel.active { display: block; }
 
     /* ── Cache panel ─────────────────────────────────────────────── */
     .cache-stats { display: flex; gap: 0.75rem; flex-wrap: wrap; }
@@ -443,6 +455,9 @@ function renderSingle(d) {
           <span class="badge ${d.status_code < 300 ? 'badge-green' : 'badge-yellow'}">HTTP ${d.status_code}</span>
           ${cacheTag}
           <span class="badge badge-blue">${d.word_count.toLocaleString()} words</span>
+          ${d.fetch_duration_seconds != null && !d.from_cache
+            ? `<span class="badge badge-yellow">⏱ ${d.fetch_duration_seconds}s</span>`
+            : ""}
         </div>
       </div>
     </div>`;
@@ -634,12 +649,91 @@ document.getElementById("batch-form").addEventListener("submit", async e => {
     ].map(([v,l]) => `<div class="stat-box"><div class="stat-num">${v}</div><div class="stat-lbl">${l}</div></div>`).join("");
 
     /* result list */
-    document.getElementById("batch-list").innerHTML = data.results.map(item => {
+    document.getElementById("batch-list").innerHTML = data.results.map((item, idx) => {
       const d = item.data;
       const dotClass = item.status === "ok" ? "dot-ok" : item.status === "cached" ? "dot-cached" : "dot-error";
       const topics = d ? (d.topics||[]).slice(0,4).map(t =>
         `<span class="badge badge-blue" style="font-size:.7rem">${esc(t)}</span>`).join("") : "";
-      return `<div class="batch-item">
+
+      let detailHTML = "";
+      if (d) {
+        /* overview panel */
+        const rows = [["Title",d.title],["Description",d.description],["Author",d.author],
+          ["Language",d.language],["Charset",d.charset],["Canonical",d.canonical],["Robots",d.robots]]
+          .filter(([,v])=>v);
+        const ogRows = Object.entries(d.og||{});
+        const twRows = Object.entries(d.twitter||{});
+        const h1s = (d.headings?.h1||[]).slice(0,3);
+        const overviewHTML = `
+          <div class="card">
+            <div class="card-title">Meta Tags</div>
+            <div class="meta-grid">${rows.map(([k,v])=>`<div class="meta-cell"><div class="meta-key">${esc(k)}</div><div class="meta-val">${esc(v)}</div></div>`).join("")}</div>
+          </div>
+          ${ogRows.length?`<div class="card"><div class="card-title">Open Graph</div><div class="meta-grid">${ogRows.map(([k,v])=>`<div class="meta-cell"><div class="meta-key">og:${esc(k)}</div><div class="meta-val">${k==="image"?`<img src="${esc(v)}" style="max-width:100%;border-radius:6px" onerror="this.style.display='none'">`:esc(v)}</div></div>`).join("")}</div></div>`:""}
+          ${twRows.length?`<div class="card"><div class="card-title">Twitter Card</div><div class="meta-grid">${twRows.map(([k,v])=>`<div class="meta-cell"><div class="meta-key">twitter:${esc(k)}</div><div class="meta-val">${esc(v)}</div></div>`).join("")}</div></div>`:""}
+          ${h1s.length?`<div class="card"><div class="card-title">H1 Headings</div>${h1s.map(h=>`<div style="padding:.25rem 0;border-bottom:1px solid var(--border);font-size:.9rem">${esc(h)}</div>`).join("")}</div>`:""}`;
+
+        /* topics panel */
+        const scores = Object.entries(d.topic_scores||{});
+        const maxS = scores.length ? Math.max(...scores.map(([,s])=>s)) : 1;
+        const topicsHTML = scores.length ? `
+          <div class="card"><div class="card-title">Page Category — <span class="badge badge-blue">${esc(d.page_category)}</span></div></div>
+          <div class="card"><div class="card-title">Topic Scores</div>
+            <div class="topic-list">${scores.map(([t,s])=>`
+              <div class="topic-row">
+                <div class="topic-name">${esc(t)}</div>
+                <div class="topic-bar-wrap"><div class="topic-bar" style="width:${Math.round((s/maxS)*100)}%;background:${colorBar(s/maxS)}"></div></div>
+                <div class="topic-pct">${Math.round(s*100)}%</div>
+              </div>`).join("")}
+            </div>
+          </div>` : `<div class="card"><div style="color:var(--muted)">No topics detected.</div></div>`;
+
+        /* links panel */
+        const links = d.links||[];
+        const linksHTML = `<div class="card"><div class="card-title">${links.length} Links</div>
+          ${links.length?`<div style="overflow:auto"><table class="link-table">
+            <thead><tr><th>URL</th><th>Text</th><th>Type</th></tr></thead>
+            <tbody>${links.slice(0,100).map(l=>`<tr>
+              <td><a href="${esc(l.href)}" target="_blank" style="color:var(--accent)">${esc(l.href.length>60?l.href.slice(0,60)+"…":l.href)}</a></td>
+              <td style="color:var(--muted)">${esc(l.text.slice(0,60))}</td>
+              <td><span class="ext-badge ${l.is_external?"ext-yes":"ext-no"}">${l.is_external?"external":"internal"}</span></td>
+            </tr>`).join("")}</tbody>
+          </table></div>${links.length>100?`<div style="color:var(--muted);font-size:.78rem;margin-top:.5rem">Showing 100 of ${links.length}</div>`:""}`:
+          `<div style="color:var(--muted)">No links found.</div>`}
+        </div>`;
+
+        /* images panel */
+        const imgs = d.images||[];
+        const imgsHTML = `<div class="card"><div class="card-title">${imgs.length} Images</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.5rem">
+            ${imgs.slice(0,30).map(i=>`<div style="background:var(--tag-bg);border-radius:8px;overflow:hidden">
+              <img src="${esc(i.src)}" alt="${esc(i.alt)}" loading="lazy" style="width:100%;height:80px;object-fit:cover" onerror="this.style.display='none'">
+              <div style="padding:.3rem .4rem;font-size:.7rem;color:var(--muted);word-break:break-all">${esc(i.alt||"(no alt)")}</div>
+            </div>`).join("")}
+          </div>
+        </div>`;
+
+        /* raw panel */
+        const rawHTML = `<div class="json-out"><pre>${esc(JSON.stringify(d, null, 2))}</pre></div>`;
+
+        detailHTML = `
+          <div class="batch-detail" onclick="event.stopPropagation()">
+            <div class="batch-tabs">
+              <div class="batch-tab active" data-bidx="${idx}" data-btab="overview">Overview</div>
+              <div class="batch-tab" data-bidx="${idx}" data-btab="topics">Topics</div>
+              <div class="batch-tab" data-bidx="${idx}" data-btab="links">Links</div>
+              <div class="batch-tab" data-bidx="${idx}" data-btab="images">Images</div>
+              <div class="batch-tab" data-bidx="${idx}" data-btab="raw">Raw JSON</div>
+            </div>
+            <div class="batch-panel active" id="bp-${idx}-overview">${overviewHTML}</div>
+            <div class="batch-panel" id="bp-${idx}-topics">${topicsHTML}</div>
+            <div class="batch-panel" id="bp-${idx}-links">${linksHTML}</div>
+            <div class="batch-panel" id="bp-${idx}-images">${imgsHTML}</div>
+            <div class="batch-panel" id="bp-${idx}-raw">${rawHTML}</div>
+          </div>`;
+      }
+
+      return `<div class="batch-item" data-bidx="${idx}">
         <div class="batch-dot ${dotClass}"></div>
         <div style="flex:1;min-width:0">
           <div class="batch-title">${esc(d?.title || item.error || item.url)}</div>
@@ -650,7 +744,9 @@ document.getElementById("batch-form").addEventListener("submit", async e => {
             ${item.status==="cached" ? '<span class="badge badge-cache">⚡ cached</span>' : ""}
             ${topics}
           </div>` : ""}
+          ${detailHTML}
         </div>
+        ${d ? `<div class="batch-chevron">▾</div>` : ""}
       </div>`;
     }).join("");
 
@@ -660,6 +756,31 @@ document.getElementById("batch-form").addEventListener("submit", async e => {
   } finally {
     btn.disabled = false;
     btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8"/></svg> Crawl All`;
+  }
+});
+
+/* ──────────────────────────────────────────────────────────────
+   Batch item expand / collapse + tab switching
+────────────────────────────────────────────────────────────── */
+document.getElementById("batch-list").addEventListener("click", e => {
+  /* Tab click — switch panel, don't toggle item */
+  const tab = e.target.closest(".batch-tab");
+  if (tab) {
+    e.stopPropagation();
+    const idx  = tab.dataset.bidx;
+    const name = tab.dataset.btab;
+    /* deactivate sibling tabs */
+    tab.closest(".batch-tabs").querySelectorAll(".batch-tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    /* deactivate sibling panels */
+    tab.closest(".batch-detail").querySelectorAll(".batch-panel").forEach(p => p.classList.remove("active"));
+    document.getElementById(`bp-${idx}-${name}`).classList.add("active");
+    return;
+  }
+  /* Item header click — toggle expand */
+  const item = e.target.closest(".batch-item[data-bidx]");
+  if (item) {
+    item.classList.toggle("open");
   }
 });
 
