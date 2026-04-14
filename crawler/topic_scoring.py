@@ -1,36 +1,3 @@
-"""
-Topic scoring and page-category detection.
-
-Improvements over v1
----------------------
-1.  **Exclusive-keyword bonus** – a keyword that belongs to only ONE topic
-    receives a 3× multiplier; two-topic keywords get 1×; three-or-more get 0.4×.
-    This suppresses promiscuous words like "article", "store", or "menu" from
-    hijacking every page's scores.
-
-2.  **Cleaned vocabularies** – removed words that were causing systematic
-    false positives:
-      - "news":       removed "article", "story", "report", "editorial",
-                      "media", "publication", "opinion"  (appear on any blog)
-      - "e-commerce": removed "store", "product", "shop", "order", "review",
-                      "rating"  (appear on any commercial/informational site)
-      - "food":       removed "menu"  (HTML nav menus are everywhere)
-      - "politics":   removed "policy", "law", "party"  (boilerplate footer words)
-      - "science":    removed "study"  (shared with education, too generic)
-      - "real-estate":removed "home"   (too generic)
-
-3.  **New "outdoors" topic** – covers hiking, camping, gear, trail, nature, etc.
-    Needed for sites like REI, AllTrails, NPS, etc.
-
-4.  **Minimum score threshold** – topics scoring below MIN_SCORE (0.08) are
-    silently dropped, preventing noise topics from polluting the list.
-
-5.  **URL-path category hints** – `/blog/`, `/shop/`, `/news/`, `/docs/` etc.
-    in the page URL are used as strong, high-confidence category signals before
-    falling back to keyword scoring.
-
-6.  **Score capping** – final scores are clamped to [0, 1].
-"""
 from __future__ import annotations
 
 import re
@@ -40,11 +7,6 @@ from urllib.parse import urlparse
 
 from crawler.schemas import PageMetadata
 
-# ---------------------------------------------------------------------------
-# Topic vocabularies
-# Rule: prefer *specific* terms over generic ones.
-# If a word could appear naturally on 3+ unrelated page types, drop it.
-# ---------------------------------------------------------------------------
 TOPIC_KEYWORDS: Dict[str, List[str]] = {
     "technology": [
         "software", "hardware", "programming", "developer", "codebase",
@@ -153,12 +115,9 @@ TOPIC_KEYWORDS: Dict[str, List[str]] = {
     ],
 }
 
-# Minimum normalised score to be included in the output topics list
-MIN_SCORE: float = 0.08
+MIN_SCORE = 0.08
 
-# ---------------------------------------------------------------------------
-# Pre-compute: keyword → list of topics it belongs to (for exclusivity check)
-# ---------------------------------------------------------------------------
+
 def _build_kw_index() -> Dict[str, List[str]]:
     idx: Dict[str, List[str]] = {}
     for topic, kws in TOPIC_KEYWORDS.items():
@@ -171,12 +130,7 @@ _KW_TO_TOPICS: Dict[str, List[str]] = _build_kw_index()
 
 
 def _exclusivity_weight(kw: str) -> float:
-    """
-    Return a multiplier based on how many topics share this keyword.
-      1 topic  → 3.0  (strong, unambiguous signal)
-      2 topics → 1.0  (moderate signal)
-      3+ topics → 0.4  (weak, noisy signal)
-    """
+    # rarer keywords across topics = higher weight
     n = len(_KW_TO_TOPICS.get(kw, []))
     if n == 1:
         return 3.0
@@ -185,30 +139,24 @@ def _exclusivity_weight(kw: str) -> float:
     return 0.4
 
 
-# ---------------------------------------------------------------------------
-# Structural category signals (checked against full lowercase body text)
-# Ordered from most-specific to least-specific to prevent early false matches.
-# ---------------------------------------------------------------------------
 _CATEGORY_SIGNALS: List[Tuple[str, List[str]]] = [
-    # Most-specific structural cues first to avoid false early matches
-    ("e-commerce",     ["add to cart", "buy now", "shopping cart", "checkout", "wishlist"]),
-    ("documentation",  ["api reference", "getting started", "installation guide",
-                        "code sample", "parameters", "return value"]),
-    ("forum",          ["reply to thread", "upvote", "moderator", "mark as answer"]),
+    ("e-commerce", ["add to cart", "buy now", "shopping cart", "checkout", "wishlist"]),
+    ("documentation", [
+        "api reference", "getting started", "installation guide", "code sample",
+        "parameters", "return value",
+    ]),
+    ("forum", ["reply to thread", "upvote", "moderator", "mark as answer"]),
     ("search-results", ["results for", "did you mean", "showing results", "no results found"]),
-    ("landing-page",   ["sign up for free", "request a demo", "start free trial"]),
-    # news BEFORE profile — news pages mention "timeline" (article timelines),
-    # so news must win before profile's "timeline" signal fires
-    ("news",           ["breaking news", "wire service", "live coverage", "press release",
-                        "newsroom", "byline"]),
-    # profile signals tightened: require unambiguous social-profile-only terms
-    ("profile",        ["unfollow", "your followers", "edit profile", "profile picture"]),
-    ("video",          ["subscribe to channel", "video player", "watch full episode"]),
-    # blog: "posted by" and "filed under" are strong; "comments" alone is too broad
-    ("blog",           ["posted by", "filed under", "leave a comment", "tags:"]),
+    ("landing-page", ["sign up for free", "request a demo", "start free trial"]),
+    ("news", [
+        "breaking news", "wire service", "live coverage", "press release",
+        "newsroom", "byline",
+    ]),
+    ("profile", ["unfollow", "your followers", "edit profile", "profile picture"]),
+    ("video", ["subscribe to channel", "video player", "watch full episode"]),
+    ("blog", ["posted by", "filed under", "leave a comment", "tags:"]),
 ]
 
-# URL path patterns that strongly indicate a category
 _URL_PATH_HINTS: List[Tuple[str, str]] = [
     (r"/blog/",        "blog"),
     (r"/news/",        "news"),
@@ -226,45 +174,19 @@ _URL_PATH_HINTS: List[Tuple[str, str]] = [
     (r"/camp/",        "outdoors"),
     (r"/hike/",        "outdoors"),
     (r"/trail/",       "outdoors"),
-    (r"/travel/",      "travel"),
+    (r"/travel/", "travel"),
 ]
 
 
-# ---------------------------------------------------------------------------
-# Tokeniser
-# ---------------------------------------------------------------------------
 def _tokenize(text: str) -> List[str]:
-    """
-    Lower-case, produce unigrams + bigrams + trigrams.
-    Bigrams/trigrams are essential for matching phrases like
-    "machine learning", "add to cart", "free shipping", etc.
-    """
     text = text.lower()
     toks = re.findall(r"[a-z][a-z0-9\-']*", text)
-    bi  = [" ".join(toks[i:i+2]) for i in range(len(toks) - 1)]
-    tri = [" ".join(toks[i:i+3]) for i in range(len(toks) - 2)]
+    bi = [" ".join(toks[i : i + 2]) for i in range(len(toks) - 1)]
+    tri = [" ".join(toks[i : i + 3]) for i in range(len(toks) - 2)]
     return toks + bi + tri
 
 
-# ---------------------------------------------------------------------------
-# Scoring
-# ---------------------------------------------------------------------------
 def _score_topics(freq: Counter, total_tokens: int) -> Dict[str, float]:
-    """
-    TF-based scoring with exclusivity weighting.
-
-    For each topic:
-        score = Σ( (freq[kw] / total_tokens) × exclusivity_weight(kw) × SCALE )
-                ─────────────────────────────────────────────────────────────────
-                                    len(topic_keywords)
-
-    Dividing by ``total_tokens`` converts raw counts to term-frequency (TF),
-    keeping scores comparable across short (blog post) and long (news homepage)
-    documents instead of letting volume inflate every score to the ceiling.
-
-    SCALE = 5000 keeps scores in a human-readable range (~0.0 – 1.0) for
-    typical web pages.
-    """
     SCALE = 5000
     if total_tokens == 0:
         return {}
@@ -286,48 +208,21 @@ def _score_topics(freq: Counter, total_tokens: int) -> Dict[str, float]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# Category detection
-# ---------------------------------------------------------------------------
 def _guess_category(url: str, body_lower: str, title: str, top_topics: List[str]) -> str:
-    """
-    Determine the structural page category using (in priority order):
-      1. URL path patterns            — highest confidence
-      2. Title + body structural cues — strong semantic signal
-      3. Highest-scoring topic        — fallback
-    """
-    # 1 — URL path
     path = urlparse(url).path.lower()
     for pattern, cat in _URL_PATH_HINTS:
         if re.search(pattern, path):
             return cat
 
-    # 2 — Scan title + body together so short pages (e.g. NYT homepage)
-    #     with keywords only in the title are still correctly classified
-    scan_text = (title.lower() + " " + body_lower)
+    scan_text = title.lower() + " " + body_lower
     for cat, needles in _CATEGORY_SIGNALS:
         if any(needle in scan_text for needle in needles):
             return cat
 
-    # 3 — Topic fallback
     return top_topics[0] if top_topics else "general"
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 def classify_page(meta: PageMetadata) -> PageMetadata:
-    """
-    Enrich *meta* with ``page_category``, ``topics``, and ``topic_scores``.
-
-    Weighted corpus
-    ---------------
-    title        ×5   – highest signal density
-    description  ×4   – explicit page summary
-    keywords     ×4   – author-declared topics
-    h1/h2/h3     ×3   – section-level topic signals
-    body text    ×1   – full content (diluted by boilerplate)
-    """
     chunks: List[str] = []
     if meta.title:
         chunks += [meta.title] * 5
@@ -341,12 +236,11 @@ def classify_page(meta: PageMetadata) -> PageMetadata:
     if meta.body_text:
         chunks.append(meta.body_text)
 
-    blob   = " ".join(chunks)
+    blob = " ".join(chunks)
     tokens = _tokenize(blob)
-    freq   = Counter(tokens)
+    freq = Counter(tokens)
     scores = _score_topics(freq, total_tokens=len(tokens))
 
-    # Sort by score descending; apply minimum threshold
     ranked = sorted(
         ((t, s) for t, s in scores.items() if s >= MIN_SCORE),
         key=lambda x: x[1],
@@ -362,7 +256,7 @@ def classify_page(meta: PageMetadata) -> PageMetadata:
         top_topics=topics,
     )
 
-    meta.topics        = topics
-    meta.topic_scores  = {t: s for t, s in ranked}
+    meta.topics = topics
+    meta.topic_scores = {t: s for t, s in ranked}
     meta.page_category = category
     return meta
