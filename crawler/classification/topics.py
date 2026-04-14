@@ -7,6 +7,9 @@ from urllib.parse import urlparse
 
 from crawler.models.schemas import PageMetadata
 
+# keyword lists per topic — I tried to pick terms that are specific enough
+# to be meaningful signals, not generic words that show up everywhere.
+# the more specific the keyword, the less noise it adds to other topics.
 TOPIC_KEYWORDS: Dict[str, List[str]] = {
     "technology": [
         "software", "hardware", "programming", "developer", "codebase",
@@ -115,10 +118,15 @@ TOPIC_KEYWORDS: Dict[str, List[str]] = {
     ],
 }
 
+# minimum score a topic needs to show up in results.
+# 0.08 felt right after testing — lower than this and you get ghost topics
+# appearing just because a word showed up once or twice.
 MIN_SCORE = 0.08
 
 
 def _build_kw_index() -> Dict[str, List[str]]:
+    # inverted index: keyword → list of topics it belongs to.
+    # built once at module load so lookups during scoring are O(1).
     idx: Dict[str, List[str]] = {}
     for topic, kws in TOPIC_KEYWORDS.items():
         for kw in kws:
@@ -130,6 +138,11 @@ _KW_TO_TOPICS: Dict[str, List[str]] = _build_kw_index()
 
 
 def _exclusivity_weight(kw: str) -> float:
+    # the core of why scoring works: a keyword that only belongs to ONE topic
+    # is a strong signal (weight 3.0). a keyword shared by many topics is weak.
+    # e.g. "kubernetes" → only technology (3.0x)
+    #      "research"   → science + healthcare + education (0.4x, too generic)
+    # without this, pages would score high for every topic that shares common words.
     n = len(_KW_TO_TOPICS.get(kw, []))
     if n == 1:
         return 3.0
@@ -138,6 +151,9 @@ def _exclusivity_weight(kw: str) -> float:
     return 0.4
 
 
+# ordered so more specific categories are checked before generic fallbacks.
+# "news" must come before "profile" because news articles often contain
+# timeline-style content which used to trigger the profile check first.
 _CATEGORY_SIGNALS: List[Tuple[str, List[str]]] = [
     ("e-commerce", ["add to cart", "buy now", "shopping cart", "checkout", "wishlist"]),
     ("documentation", [
@@ -156,6 +172,9 @@ _CATEGORY_SIGNALS: List[Tuple[str, List[str]]] = [
     ("blog", ["posted by", "filed under", "leave a comment", "tags:"]),
 ]
 
+# URL path patterns are the most reliable category signal — if the path
+# contains /blog/ or /shop/ it's almost certainly that category.
+# I check these before scanning body text.
 _URL_PATH_HINTS: List[Tuple[str, str]] = [
     (r"/blog/", "blog"),
     (r"/news/", "news"),
@@ -178,15 +197,20 @@ _URL_PATH_HINTS: List[Tuple[str, str]] = [
 
 
 def _tokenize(text: str) -> List[str]:
+    # unigrams + bigrams + trigrams so multi-word keywords like
+    # "machine learning" or "add to cart" get matched as a unit.
     text = text.lower()
     toks = re.findall(r"[a-z][a-z0-9\-']*", text)
-    bi = [" ".join(toks[i : i + 2]) for i in range(len(toks) - 1)]
+    bi  = [" ".join(toks[i : i + 2]) for i in range(len(toks) - 1)]
     tri = [" ".join(toks[i : i + 3]) for i in range(len(toks) - 2)]
     return toks + bi + tri
 
 
 def _score_topics(freq: Counter, total_tokens: int) -> Dict[str, float]:
-    SCALE = 5000
+    # TF-weighted scoring with exclusivity boost.
+    # using term frequency (count / total) instead of raw count was important —
+    # otherwise long pages would outscore short ones just by having more text.
+    SCALE = 5000  # brings TF values (which are tiny floats) into a readable range
     if total_tokens == 0:
         return {}
 
@@ -200,6 +224,8 @@ def _score_topics(freq: Counter, total_tokens: int) -> Dict[str, float]:
         for topic in topics_for_tok:
             weighted_hits[topic] += tf * w * SCALE
 
+    # normalize by vocab size so topics with more keywords don't have an
+    # unfair advantage just because their list is longer
     out: Dict[str, float] = {}
     for topic, total in weighted_hits.items():
         raw = total / len(TOPIC_KEYWORDS[topic])
@@ -208,6 +234,7 @@ def _score_topics(freq: Counter, total_tokens: int) -> Dict[str, float]:
 
 
 def _guess_category(url: str, body_lower: str, title: str, top_topics: List[str]) -> str:
+    # priority: URL path hint → body/title signals → top topic fallback
     path = urlparse(url).path.lower()
     for pattern, cat in _URL_PATH_HINTS:
         if re.search(pattern, path):
@@ -222,6 +249,9 @@ def _guess_category(url: str, body_lower: str, title: str, top_topics: List[str]
 
 
 def classify_page(meta: PageMetadata) -> PageMetadata:
+    # build the text blob, weighting important fields more heavily.
+    # title × 5 and description × 4 because those are the most intentional
+    # signals about what the page is — the author chose those words specifically.
     chunks: List[str] = []
     if meta.title:
         chunks += [meta.title] * 5
@@ -231,7 +261,7 @@ def classify_page(meta: PageMetadata) -> PageMetadata:
         chunks += [meta.keywords] * 4
     for lvl in ("h1", "h2", "h3"):
         for h in meta.headings.get(lvl, []):
-            chunks += [h] * 3
+            chunks += [h] * 3   # headings are more signal-dense than body prose
     if meta.body_text:
         chunks.append(meta.body_text)
 
@@ -240,6 +270,7 @@ def classify_page(meta: PageMetadata) -> PageMetadata:
     freq = Counter(tokens)
     scores = _score_topics(freq, total_tokens=len(tokens))
 
+    # filter out topics below threshold and sort highest first
     ranked = sorted(
         ((t, s) for t, s in scores.items() if s >= MIN_SCORE),
         key=lambda x: x[1],

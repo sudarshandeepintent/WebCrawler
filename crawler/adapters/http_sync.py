@@ -7,6 +7,11 @@ import httpx
 
 from crawler.domain.fetch_result import BACKOFF, FetchResult, HDRS, referer_for
 
+# curl-cffi is optional — if it's not installed, we fall back to httpx.
+# I only discovered I needed this after getting 403s on REI and Amazon.
+# turns out Python's default TLS stack has a fingerprint that Akamai/Cloudflare
+# flag instantly. curl-cffi with impersonate="chrome124" mimics Chrome's
+# actual TLS handshake, which gets through cleanly.
 try:
     from curl_cffi import requests as cffi_requests
 except ImportError:
@@ -19,6 +24,8 @@ class SyncFetchStrategy(Protocol):
 
 
 class _CurlSync:
+    # preferred fetcher — uses curl-cffi to impersonate Chrome 124 at the TLS layer.
+    # this is what lets me get through WAF-protected sites without getting blocked.
     def pull(self, url: str, timeout: float, follow: bool) -> FetchResult:
         h = {**HDRS, "Referer": referer_for(url)}
         try:
@@ -41,8 +48,11 @@ class _CurlSync:
 
 
 class _HttpxSync:
+    # fallback when curl-cffi isn't available (e.g. some CI environments or
+    # platforms where curl can't be compiled). handles 429/503 with backoff retries.
     def pull(self, url: str, timeout: float, follow: bool) -> FetchResult:
         h = {**HDRS, "Referer": referer_for(url)}
+        # split the timeout so a slow connection doesn't eat the whole budget
         t = httpx.Timeout(
             connect=min(20.0, timeout),
             read=timeout,
@@ -50,7 +60,8 @@ class _HttpxSync:
             pool=10.0,
         )
         last: Optional[FetchResult] = None
-        delays = (0.0,) + BACKOFF
+        delays = (0.0,) + BACKOFF  # first attempt is immediate, then backoff kicks in
+
         for i, wait in enumerate(delays):
             if wait:
                 time.sleep(wait)
@@ -65,17 +76,14 @@ class _HttpxSync:
                     html=resp.text,
                     content_type=ct,
                 )
+                # 429 = rate limited, 503 = temporarily unavailable — worth retrying
                 if resp.status_code in (429, 503) and i < len(BACKOFF):
                     last = fr
                     continue
                 return fr
             except httpx.ReadTimeout:
                 return FetchResult(
-                    url,
-                    url,
-                    0,
-                    "",
-                    "",
+                    url, url, 0, "", "",
                     error=f"read timed out ({timeout:g}s), try higher timeout in json (max 120)",
                 )
             except httpx.ConnectTimeout as e:
@@ -89,6 +97,7 @@ class _HttpxSync:
 
 
 def _strategy() -> SyncFetchStrategy:
+    # pick at startup, not per-request — no need to check every time
     if cffi_requests is not None:
         return _CurlSync()
     return _HttpxSync()

@@ -1,0 +1,418 @@
+====================================================================
+  WEB CRAWLER — PROJECT EXPLANATION
+  Author: Sudarshan Maskare
+====================================================================
+
+--------------------------------------------------------------------
+1. WHAT I BUILT
+--------------------------------------------------------------------
+
+I built a web crawling API from scratch using Python and FastAPI.
+The core idea is simple: you give it any URL, and it fetches that
+page, pulls out all the useful metadata from the HTML, figures out
+what the page is about (topics and category), and returns everything
+as structured JSON.
+
+On top of the basic crawler, I added three more things that I felt
+made it production-ready:
+
+  1. A browser dashboard UI so anyone can use it without touching curl
+  2. Async batch crawling so you can submit up to 50 URLs at once
+  3. A caching layer (in-memory by default, Redis for production) so
+     repeated crawls for the same URL are instant
+
+I deployed the whole thing to Google Cloud Run and connected it to
+an Upstash Redis instance for the cache.
+
+
+--------------------------------------------------------------------
+2. HOW I STRUCTURED THE CODE
+--------------------------------------------------------------------
+
+I deliberately kept the code layered so each piece has one job:
+
+  domain/          — pure data classes (FetchResult, errors). No logic,
+                     no dependencies. I put these here so every other
+                     layer can import them without circular imports.
+
+  adapters/        — the actual HTTP fetching. I wrote two strategies:
+                     curl-cffi (primary) and httpx (fallback). Having
+                     them behind a shared interface meant I could swap
+                     implementations without touching any other file.
+
+  parsing/         — takes raw HTML and turns it into a PageMetadata
+                     object. Pure transformation, no network calls.
+
+  classification/  — reads the PageMetadata and assigns topic scores
+                     and a page category. Again, pure logic, no I/O.
+
+  services/        — orchestrates the above: fetch → parse → classify
+                     → cache. This is where the workflow lives.
+
+  infrastructure/  — the cache implementations. MemoryCache for local
+                     dev and single-instance deployments, RedisCache
+                     when a REDIS_URL is configured.
+
+  api/             — FastAPI route handlers. They just call the service
+                     layer and return the result. No business logic here.
+
+I also applied a few design patterns I find useful:
+  - Factory: create_app() builds the FastAPI instance with middleware
+  - Strategy: http_sync.py picks curl-cffi or httpx at startup
+  - Facade: crawl_url() hides the fetch-parse-classify pipeline behind
+    one function call
+
+The shallow re-export files (crawler/cache.py, crawler/schemas.py,
+etc.) exist only so older import paths still work — they're just one-
+liners that re-export from the real module.
+
+
+--------------------------------------------------------------------
+3. THE TOPIC SCORING ALGORITHM
+--------------------------------------------------------------------
+
+This was the part I spent the most time on. I wanted the scorer to
+be accurate enough that crawling a camping blog doesn't return
+"automotive" or "politics" as the top topic just because those words
+appear once or twice.
+
+My approach:
+
+  Step 1 — Tokenize
+  I split the page text into unigrams, bigrams, and trigrams. This
+  lets me match multi-word keywords like "climate change", "machine
+  learning", or "free shipping" as single units rather than missing
+  them or double-counting their individual words.
+
+  Step 2 — Build a keyword → topic(s) index
+  Before any request, I pre-build an inverted index from each keyword
+  to which topics it belongs. This is done once at startup, not per
+  request, so lookups are O(1).
+
+  Step 3 — Score with TF weighting + exclusivity
+  For each keyword that appears in the page, I compute its term
+  frequency (count / total tokens) and multiply it by an exclusivity
+  weight:
+    - keyword belongs to 1 topic:  weight = 3.0  (very strong signal)
+    - keyword belongs to 2 topics: weight = 1.0  (moderate signal)
+    - keyword belongs to 3+ topics: weight = 0.4  (weak, too generic)
+
+  This exclusivity weighting was the key insight. The word "research"
+  appears in science, healthcare, AND education — so it should not
+  strongly push any one of them. But "kubernetes" only appears in
+  technology, so it's a very strong signal.
+
+  Step 4 — Normalize
+  I divide each topic's raw weighted score by its vocabulary size
+  (how many keywords that topic has). This prevents topics with more
+  keywords from having an unfair scoring advantage.
+
+  Step 5 — Category detection
+  After scoring, I assign a page_category. I first check the URL path
+  for hints (/blog/, /shop/, /docs/, /camp/, etc.), then scan the body
+  for category signals ("add to cart" → e-commerce, "posted by" →
+  blog, etc.), and finally fall back to the top-scoring topic.
+
+  I also give extra weight to the title, description, and keywords meta
+  tag (repeating them 4-5x in the text blob before tokenizing) because
+  those fields are the most intentional signals about what a page is.
+
+TIME COMPLEXITY — Topic Scoring:
+
+  _tokenize(text):
+    - O(n) for regex scan, where n = number of characters
+    - O(T) to build bigrams and trigrams, where T = number of tokens
+    - Total: O(n)
+
+  _build_kw_index() [runs once at startup]:
+    - O(K) where K = total keywords across all topics (~250)
+    - Result stored in module-level dict, never recomputed
+
+  _score_topics(freq, total_tokens):
+    - O(U) where U = number of unique tokens that matched a keyword
+    - In practice U << T because most tokens are not in the keyword list
+    - Total: O(U), approximately O(1) per crawl for typical pages
+
+  classify_page(meta):
+    - Dominated by tokenizing the text blob: O(n)
+    - The scoring and sorting are O(U + 16 log 16) ≈ O(U)
+    - Overall: O(n) where n = total character length of page content
+
+SPACE COMPLEXITY — Topic Scoring:
+
+  _KW_TO_TOPICS index: O(K) at module level, K ≈ 250 keywords
+  Tokens list per request: O(T), T = number of tokens in the page text
+  freq Counter: O(V) where V = number of unique tokens (V ≤ T)
+  scored_hits dict: O(16) — at most 16 topics, effectively O(1)
+  Overall per request: O(T)
+
+
+--------------------------------------------------------------------
+4. THE CACHING LAYER
+--------------------------------------------------------------------
+
+I built two cache implementations behind the same interface so the
+rest of the code doesn't need to know which one is active.
+
+MemoryCache — my in-process LRU cache:
+
+  I used Python's OrderedDict to get LRU ordering without any
+  extra dependencies. The key insight: OrderedDict preserves insertion
+  order and lets me move a key to the "end" (most recently used) on
+  every access, and evict from the "front" (least recently used) when
+  the cache is full.
+
+  Each entry stores the serialized PageMetadata, a cached_at timestamp,
+  and an expires_at monotonic clock value. On every get(), I check if
+  the entry has expired before returning it.
+
+  Thread safety is handled with a single threading.Lock(). I keep the
+  critical sections short — just the dict operations — so contention
+  is minimal.
+
+  Cache keys are SHA-256 hashes of the URL, prefixed with
+  "webcrawler:". This keeps keys a fixed length regardless of how long
+  or complex the URL is.
+
+RedisCache — for production / multi-instance deployments:
+
+  The Redis implementation stores each entry as a JSON blob with
+  Redis's native SETEX command, which handles TTL expiry server-side.
+  On cache hit, I deserialize back to a PageMetadata object using
+  Pydantic's model_validate().
+
+  The main reason I added Redis: Cloud Run can spin up multiple
+  container instances. With MemoryCache, each instance has its own
+  isolated cache — a URL cached on instance A is a cache miss on
+  instance B. Redis solves this by sharing the cache across all
+  instances, and it also persists across deployments.
+
+  I chose Upstash Redis specifically because it's serverless (no
+  always-on instance to pay for), has a free tier, and supports TLS
+  (rediss://) out of the box.
+
+TIME COMPLEXITY — Cache:
+
+  MemoryCache.get(url):
+    - SHA-256 hash: O(len(url)), effectively O(1) since URLs are short
+    - OrderedDict lookup: O(1) average
+    - move_to_end: O(1)
+    - Pydantic deserialization: O(M) where M = serialized metadata size
+    - Total: O(M)
+
+  MemoryCache.set(url):
+    - _sweep() expired entries: O(N) worst case, O(expired) typical
+    - _trim() to max_size: O(1) per eviction (popitem from front)
+    - OrderedDict insert: O(1)
+    - Total: O(N) worst case, O(1) typical
+
+  RedisCache.get / set:
+    - Redis network round-trip: O(1) plus network latency (~1–5 ms)
+    - JSON serialization/deserialization: O(M)
+    - Total: O(M) compute + network
+
+SPACE COMPLEXITY — Cache:
+
+  MemoryCache:
+    - O(N × M) where N = number of cached entries (max 500),
+      M = average serialized size of a PageMetadata object
+    - In practice each entry is ~5–20 KB, so max memory ≈ 10 MB
+
+  RedisCache:
+    - Same O(N × M) but stored in the Redis server, not in process memory
+    - My application's memory footprint is O(1) for the cache itself
+
+
+--------------------------------------------------------------------
+5. ASYNC BATCH CRAWLING
+--------------------------------------------------------------------
+
+For batch crawling I used asyncio.gather() with a semaphore to control
+concurrency. My reasoning: if I just fire off all requests at the same
+time for 50 URLs, I could hit rate limits or overwhelm slow sites. The
+semaphore lets me set a cap (default 5, configurable up to 20) so at
+most that many fetches run simultaneously.
+
+The order preservation was something I specifically had to think about.
+asyncio.gather() returns results in the same order as the input tasks,
+which is exactly what I need — the i-th result corresponds to the i-th
+URL. This means I don't need any extra sorting step.
+
+I also check the cache before acquiring the semaphore. This means
+already-cached URLs get their results immediately without counting
+against the concurrency limit, which makes second calls on the same
+URL set nearly instant (I tested 3 URLs: 3.187s cold, 0.091s warm).
+
+TIME COMPLEXITY — Batch Crawling:
+
+  Wall-clock time: O(ceil(n / c) × T_avg)
+    where n = number of URLs, c = concurrency, T_avg = avg fetch time
+    (With c=5 and 10 URLs, roughly 2 "waves" of 5 parallel fetches)
+
+  CPU time: O(n × (n_i + s_i))
+    where n_i = tokenization cost for URL i, s_i = scoring cost for URL i
+    These are all independent so they can overlap.
+
+  asyncio.gather overhead: O(n) for task creation and result collection
+
+SPACE COMPLEXITY — Batch Crawling:
+
+  O(n × M) to hold all n results in memory simultaneously
+    where M = average PageMetadata size
+  O(c) for the semaphore slot counter (effectively O(1))
+  The tasks list: O(n) coroutine objects
+
+
+--------------------------------------------------------------------
+6. WAF BYPASS — WHY I NEEDED IT
+--------------------------------------------------------------------
+
+Early on, every request to sites like REI.com or Amazon returned
+HTTP 403. After debugging I realized these sites use Akamai or
+Cloudflare WAF which inspects the TLS fingerprint (JA3 hash) of the
+connecting client. Python's default TLS stack has a distinct JA3
+hash that bots are known for.
+
+My fix was to use curl-cffi, a Python wrapper around curl that can
+impersonate a real browser's TLS handshake. With
+impersonate="chrome124", my requests look identical to Chrome 124
+at the TLS level. I also set the full Chrome 124 HTTP header set
+(User-Agent, Accept, Sec-Fetch-*, Cache-Control, etc.) and a dynamic
+Referer header set to the site's homepage.
+
+I keep httpx as a fallback for environments where curl-cffi can't
+be installed (the adapter checks for it at startup and picks
+whichever is available). The httpx fallback also handles 429/503
+responses with exponential backoff retries.
+
+
+--------------------------------------------------------------------
+7. HTML PARSING
+--------------------------------------------------------------------
+
+I used BeautifulSoup4 with the lxml parser. My parser extracts:
+
+  - Standard meta tags: title, description, keywords, author, robots,
+    canonical, language, charset
+  - Open Graph tags: og:title, og:description, og:image, og:type, etc.
+  - Twitter Card tags: twitter:card, twitter:title, twitter:image, etc.
+  - Headings: h1 through h6, collected into a dict by level
+  - Links: all <a href> tags, deduplicated, with external/internal flag
+  - Images: all <img src> and <img data-src> tags with alt text
+  - Body text: visible text only, skipping script/style/nav/header/footer
+
+For body text extraction I walk the DOM tree manually using
+body.descendants, skipping elements in my _SKIP set. This gives me
+cleaner text than calling soup.get_text() on the whole document, which
+would include menu items, footers, and script content.
+
+TIME COMPLEXITY — HTML Parsing:
+
+  BeautifulSoup parse: O(H) where H = HTML document size
+  Meta tag extraction: O(1) per tag (soup.find is O(tags) in worst case
+    but the parser builds an index, so in practice it's fast)
+  Link extraction: O(L) where L = number of <a> tags
+  Image extraction: O(I) where I = number of <img> tags
+  Body text walk: O(N_nodes) where N_nodes = number of DOM nodes
+  Overall: O(H) dominated by the initial parse
+
+SPACE COMPLEXITY — HTML Parsing:
+
+  BeautifulSoup DOM tree: O(H) — stores the full parsed document
+  links list: O(L)
+  images list: O(I)
+  body_text string: O(B) where B = total visible text length
+  Overall: O(H)
+
+
+--------------------------------------------------------------------
+8. CHALLENGES I FACED AND HOW I SOLVED THEM
+--------------------------------------------------------------------
+
+WAF-protected sites (403 errors):
+  As described above, I solved this by switching to curl-cffi with
+  Chrome 124 TLS impersonation. Before I figured this out, I tried
+  adding headers manually in httpx — that alone wasn't enough because
+  the TLS fingerprint was still Python's.
+
+Topic scoring accuracy:
+  My first version just counted raw keyword hits. The problem was that
+  long articles would score everything equally since popular words
+  appear many times. I fixed this by switching to TF (term frequency)
+  scoring. The second problem was that generic words like "research"
+  or "data" would light up multiple unrelated topics. The exclusivity
+  weight system (1 topic = 3×, 2 topics = 1×, 3+ topics = 0.4×) fixed
+  this — pages now score cleanly for their actual subject matter.
+
+CORS + credentials with wildcard origin:
+  After deploying to Cloud Run I set CORS_ORIGINS=* but also had
+  allow_credentials=True in the middleware. Starlette raises a
+  ValueError for this combination (it's actually invalid per the
+  CORS spec — you can't use credentials with a wildcard origin).
+  My fix: automatically set allow_credentials=False when the origin
+  list is ["*"], and True only for specific origin lists.
+
+Batch tab clicks not working in the UI:
+  I had added onclick="event.stopPropagation()" to the detail panel
+  div to prevent clicks inside it from collapsing the item. But this
+  also blocked tab clicks from reaching my delegated event listener
+  on the parent list. The fix: remove the inline handler and instead
+  guard against collapse by checking if e.target.closest(".batch-detail")
+  is truthy before running the toggle logic.
+
+Stale Docker image (404 on new routes):
+  After adding new API routes, /cache/stats kept returning 404.
+  The cause was that I had re-run gcloud run deploy without first
+  running gcloud builds submit. The deploy command only tells Cloud
+  Run which image to use — it does not rebuild the image. I now always
+  run builds submit before deploy.
+
+
+--------------------------------------------------------------------
+9. WHAT I WOULD IMPROVE GIVEN MORE TIME
+--------------------------------------------------------------------
+
+  - Add a proper job queue (e.g., Celery + Redis) for very large batch
+    jobs so they don't block the HTTP request for minutes
+  - Persistent crawl history stored in a database (Cloud Spanner or
+    PostgreSQL) so you can look up past results without re-crawling
+  - Rate limiting per IP on the API endpoints
+  - Smarter text extraction using readability/trafilatura to get just
+    the main article content, not the whole page
+  - JavaScript rendering support (Playwright/Puppeteer) for SPAs that
+    don't serve content in initial HTML
+  - More topic categories and better vocabulary coverage — 16 topics
+    with ~250 keywords is enough for demos but a real product would
+    need more coverage
+
+
+--------------------------------------------------------------------
+10. SUMMARY TABLE — TIME AND SPACE COMPLEXITY
+--------------------------------------------------------------------
+
+Component                   | Time Complexity        | Space Complexity
+-----------------------------|------------------------|------------------
+_tokenize(text)             | O(n)                   | O(T)
+_build_kw_index() [startup] | O(K)                   | O(K)
+_score_topics(freq, total)  | O(U)                   | O(16) ≈ O(1)
+classify_page(meta)         | O(n)                   | O(T)
+parse_page(fetch_result)    | O(H)                   | O(H)
+MemoryCache.get(url)        | O(M) amortized O(1)    | —
+MemoryCache.set(url, meta)  | O(N) worst, O(1) avg   | O(N × M)
+MemoryCache (total storage) | —                      | O(N × M)
+RedisCache.get / set        | O(M) + network         | O(1) in-process
+crawl_url (single)          | O(H + n)               | O(H + T)
+crawl_batch (n URLs)        | O(ceil(n/c) × T_avg)   | O(n × M)
+asyncio.gather overhead     | O(n)                   | O(n)
+
+  n = character count of page text
+  T = number of tokens in the page text
+  K = total keywords in vocabulary (~250)
+  U = unique tokens that matched a keyword (U << T)
+  H = HTML document size (bytes/chars)
+  M = serialized PageMetadata size (~5–20 KB per page)
+  N = number of entries in the cache (max 500)
+  c = concurrency limit for batch crawl (default 5, max 20)
+
+
+====================================================================

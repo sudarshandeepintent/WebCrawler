@@ -7,6 +7,8 @@ import httpx
 
 from crawler.domain.fetch_result import BACKOFF, FetchResult, HDRS, referer_for
 
+# same curl-cffi trick as the sync adapter — needed for WAF-protected sites.
+# async version uses curl_cffi's AsyncSession instead of requests.get
 try:
     from curl_cffi.requests import AsyncSession as _CffiSession  # type: ignore[import]
     _have_cffi = True
@@ -40,9 +42,10 @@ async def _httpx(url: str, timeout: float, follow: bool) -> FetchResult:
     t = httpx.Timeout(connect=min(20.0, timeout), read=timeout, write=min(20.0, timeout), pool=10.0)
     last: Optional[FetchResult] = None
     delays = (0.0,) + BACKOFF
+
     for i, wait in enumerate(delays):
         if wait:
-            await asyncio.sleep(wait)
+            await asyncio.sleep(wait)  # non-blocking sleep — other tasks keep running
         try:
             async with httpx.AsyncClient(headers=h, timeout=t, follow_redirects=follow) as client:
                 resp = await client.get(url)
@@ -70,6 +73,7 @@ async def async_fetch_page(
     timeout: float = 45.0,
     follow_redirects: bool = True,
 ) -> FetchResult:
+    # prefer curl-cffi, fall back to httpx if it's not installed
     if _have_cffi:
         return await _curl(url, timeout, follow_redirects)
     return await _httpx(url, timeout, follow_redirects)

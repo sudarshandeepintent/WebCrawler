@@ -33,20 +33,27 @@ def crawl_one(
     use_cache: bool = Query(default=True),
 ) -> PageMetadata:
     url = str(request.url)
+
+    # check cache first — skip entirely if use_cache=false (useful for testing
+    # or when you know the page has changed since the last crawl)
     if use_cache:
         c = cache.get(url)
         if c is not None:
             return c
+
     try:
         out = crawl_url(url, timeout=request.timeout, follow_redirects=request.follow_redirects)
     except UpstreamCrawlError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+
     cache.set(url, out)
     return out
 
 
 @router.post("/crawl/batch", response_model=BatchCrawlResponse, tags=["crawl"])
 async def crawl_many(request: BatchCrawlRequest) -> BatchCrawlResponse:
+    # pydantic already validated: 1–50 URLs, concurrency 1–20, valid URLs.
+    # just pass through to the service layer.
     urls = [str(u) for u in request.urls]
     return await crawl_batch(
         urls,
@@ -75,4 +82,6 @@ def cache_evict(url: str = Query(...)):
 
 @router.get("/health", tags=["ops"])
 def health():
+    # quick liveness check — also reports which cache backend is active
+    # so I can confirm Redis is connected after a deploy
     return JSONResponse({"status": "ok", "cache_backend": cache.stats().backend})

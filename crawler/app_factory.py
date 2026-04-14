@@ -10,13 +10,16 @@ from crawler.config import settings
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Web Crawler API", version="2.0.0")
+
+    # gzip responses over 512 bytes — helps a lot for large JSON with many links/images
     app.add_middleware(GZipMiddleware, minimum_size=512)
 
     if settings.cors_origins:
         origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
         if origins:
-            # allow_credentials must be False when allow_origins contains "*"
-            # (Starlette raises ValueError otherwise)
+            # Starlette raises ValueError if you combine allow_origins=["*"] with
+            # allow_credentials=True — it's actually invalid per the CORS spec.
+            # so I only set credentials=True when specific origins are listed.
             wildcard = origins == ["*"]
             app.add_middleware(
                 CORSMiddleware,
