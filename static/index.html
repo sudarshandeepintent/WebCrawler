@@ -5,137 +5,695 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Web Crawler</title>
   <style>
+    /* ── Tokens ─────────────────────────────────────────────────── */
     :root {
-      --bg: #0f1419;
-      --panel: #1a2332;
-      --text: #e7ecf3;
-      --muted: #8b9cb3;
-      --accent: #3d8bfd;
-      --err: #f87171;
-      --ok: #4ade80;
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --border:   #30363d;
+      --text:     #e6edf3;
+      --muted:    #8b949e;
+      --accent:   #58a6ff;
+      --accent2:  #3fb950;
+      --warn:     #d29922;
+      --err:      #f85149;
+      --tag-bg:   #1f2937;
+      --radius:   10px;
     }
-    * { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.5;
+      line-height: 1.55;
+      font-size: 14px;
     }
-    .wrap { max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
-    h1 { font-size: 1.35rem; font-weight: 600; margin: 0 0 0.25rem; }
-    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
-    form {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-bottom: 1.25rem;
+
+    /* ── Layout ─────────────────────────────────────────────────── */
+    .shell   { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 220px; flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 1.25rem 0;
+      display: flex; flex-direction: column; gap: 0.25rem;
     }
-    input[type="url"] {
-      flex: 1 1 14rem;
-      padding: 0.6rem 0.75rem;
-      border: 1px solid #2d3a4d;
-      border-radius: 8px;
-      background: var(--panel);
-      color: var(--text);
-      font-size: 1rem;
+    .main { flex: 1; padding: 1.5rem; overflow: auto; max-width: 900px; }
+
+    /* ── Sidebar ─────────────────────────────────────────────────── */
+    .logo {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0 1rem 1rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0.5rem;
+      font-weight: 700; font-size: 1rem; color: var(--accent);
     }
-    input[type="url"]::placeholder { color: var(--muted); }
-    button {
-      padding: 0.6rem 1.1rem;
-      border: none;
-      border-radius: 8px;
-      background: var(--accent);
-      color: #fff;
-      font-weight: 600;
-      font-size: 0.95rem;
-      cursor: pointer;
+    .logo svg { width: 20px; height: 20px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.5rem 1rem;
+      cursor: pointer; color: var(--muted);
+      border-left: 3px solid transparent;
+      transition: all .15s;
+      font-size: 0.88rem;
     }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .banner {
-      padding: 0.65rem 0.85rem;
-      border-radius: 8px;
-      font-size: 0.9rem;
+    .nav-item:hover  { color: var(--text); background: rgba(255,255,255,.04); }
+    .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(88,166,255,.07); }
+    .nav-sep { height: 1px; background: var(--border); margin: 0.5rem 0; }
+
+    /* ── Headings ────────────────────────────────────────────────── */
+    .page-title { font-size: 1.15rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .page-sub   { color: var(--muted); font-size: 0.84rem; margin-bottom: 1.25rem; }
+
+    /* ── Input group ─────────────────────────────────────────────── */
+    .input-row {
+      display: flex; gap: 0.5rem; flex-wrap: wrap;
       margin-bottom: 1rem;
-      display: none;
+    }
+    input[type="url"], input[type="number"], textarea, select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 0.92rem;
+      padding: 0.55rem 0.75rem;
+      outline: none;
+    }
+    input[type="url"]:focus, textarea:focus { border-color: var(--accent); }
+    input[type="url"]  { flex: 1 1 16rem; }
+    textarea {
+      width: 100%; resize: vertical; min-height: 90px;
+      font-family: inherit; font-size: 0.88rem;
+    }
+    textarea::placeholder, input::placeholder { color: var(--muted); }
+
+    .opt-row {
+      display: flex; gap: 1rem; align-items: center;
+      flex-wrap: wrap; margin-bottom: 1rem;
+    }
+    .opt-label { color: var(--muted); font-size: 0.82rem; }
+    input[type="range"] { accent-color: var(--accent); width: 100px; }
+
+    /* ── Buttons ─────────────────────────────────────────────────── */
+    .btn {
+      padding: 0.55rem 1.1rem;
+      border: none; border-radius: var(--radius);
+      font-weight: 600; font-size: 0.88rem; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      transition: opacity .15s;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary  { background: var(--accent); color: #000; }
+    .btn-danger   { background: #3d1a1a; color: var(--err); border: 1px solid #7f2d2d; }
+    .btn-ghost    { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+
+    /* ── Banner ──────────────────────────────────────────────────── */
+    .banner {
+      border-radius: var(--radius); padding: 0.6rem 0.85rem;
+      font-size: 0.85rem; margin-bottom: 1rem; display: none;
     }
     .banner.show { display: block; }
-    .banner.err { background: #3f1d1d; color: var(--err); border: 1px solid #7f2d2d; }
-    .banner.ok { background: #14261a; color: var(--ok); border: 1px solid #225c32; }
-    .out {
-      background: var(--panel);
-      border: 1px solid #2d3a4d;
-      border-radius: 10px;
-      padding: 1rem;
-      font-size: 0.82rem;
-      overflow: auto;
-      max-height: 70vh;
+    .banner.ok  { background: #122118; color: var(--accent2); border: 1px solid #2a5c38; }
+    .banner.err { background: #2a1010; color: var(--err);     border: 1px solid #7f2020; }
+    .banner.info{ background: #1a2030; color: var(--accent);  border: 1px solid #2d4060; }
+
+    /* ── Result tabs ─────────────────────────────────────────────── */
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+    .tab {
+      padding: 0.5rem 1rem; cursor: pointer;
+      color: var(--muted); font-size: 0.86rem; font-weight: 500;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
     }
-    pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
-    footer { margin-top: 2rem; font-size: 0.8rem; color: var(--muted); }
-    a { color: var(--accent); }
+    .tab:hover  { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-panel  { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Cards ───────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+    }
+    .card-title { font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 0.6rem; }
+
+    /* ── Meta grid ───────────────────────────────────────────────── */
+    .meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.6rem; }
+    .meta-cell { background: var(--tag-bg); border-radius: 8px; padding: 0.6rem 0.75rem; }
+    .meta-key  { font-size: 0.73rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 0.2rem; }
+    .meta-val  { font-size: 0.88rem; word-break: break-word; }
+
+    /* ── Topic bars ──────────────────────────────────────────────── */
+    .topic-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .topic-row  { display: flex; align-items: center; gap: 0.6rem; }
+    .topic-name { width: 120px; font-size: 0.84rem; text-transform: capitalize; flex-shrink: 0; }
+    .topic-bar-wrap { flex: 1; background: var(--tag-bg); border-radius: 4px; height: 8px; overflow: hidden; }
+    .topic-bar  { height: 100%; border-radius: 4px; background: var(--accent); transition: width .4s; }
+    .topic-pct  { width: 38px; text-align: right; font-size: 0.78rem; color: var(--muted); flex-shrink: 0; }
+
+    /* ── Category badge ──────────────────────────────────────────── */
+    .badge {
+      display: inline-block; padding: 0.2rem 0.65rem;
+      border-radius: 999px; font-size: 0.76rem; font-weight: 600;
+    }
+    .badge-blue   { background: rgba(88,166,255,.15); color: var(--accent); }
+    .badge-green  { background: rgba(63,185,80,.15);  color: var(--accent2); }
+    .badge-yellow { background: rgba(210,153,34,.15); color: var(--warn); }
+    .badge-cache  { background: rgba(63,185,80,.12);  color: var(--accent2); border: 1px solid rgba(63,185,80,.3); font-size: 0.72rem; }
+
+    /* ── Links table ─────────────────────────────────────────────── */
+    .link-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .link-table th { text-align: left; padding: 0.35rem 0.5rem; color: var(--muted); border-bottom: 1px solid var(--border); font-size: 0.76rem; text-transform: uppercase; }
+    .link-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid rgba(48,54,61,.5); word-break: break-all; }
+    .link-table tr:hover td { background: rgba(255,255,255,.02); }
+    .ext-badge { font-size: 0.68rem; padding: 0.1rem 0.4rem; border-radius: 4px; }
+    .ext-yes { background: rgba(248,81,73,.1);  color: var(--err); }
+    .ext-no  { background: rgba(63,185,80,.1);  color: var(--accent2); }
+
+    /* ── JSON pre ────────────────────────────────────────────────── */
+    .json-out {
+      background: #0d1117; border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.85rem;
+      font-size: 0.78rem; overflow: auto; max-height: 60vh;
+    }
+    pre { white-space: pre-wrap; word-break: break-word; }
+
+    /* ── Stats row ───────────────────────────────────────────────── */
+    .stats-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .stat-box {
+      flex: 1 1 100px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.75rem;
+      text-align: center;
+    }
+    .stat-num  { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+    .stat-lbl  { font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem; text-transform: uppercase; }
+
+    /* ── Batch result list ───────────────────────────────────────── */
+    .batch-item {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.75rem 1rem;
+      margin-bottom: 0.6rem;
+      display: flex; gap: 0.75rem; align-items: flex-start;
+    }
+    .batch-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+    .dot-ok     { background: var(--accent2); }
+    .dot-cached { background: var(--accent); }
+    .dot-error  { background: var(--err); }
+    .batch-url  { font-size: 0.8rem; color: var(--muted); word-break: break-all; }
+    .batch-title{ font-size: 0.9rem; font-weight: 600; margin-bottom: 0.15rem; }
+    .batch-meta { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.35rem; }
+
+    /* ── Cache panel ─────────────────────────────────────────────── */
+    .cache-stats { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .cs-box { flex: 1 1 120px; background: var(--tag-bg); border-radius: 8px; padding: 0.6rem 0.85rem; }
+    .cs-val { font-size: 1.2rem; font-weight: 700; }
+    .cs-key { font-size: 0.72rem; color: var(--muted); }
+
+    /* ── Spinner ─────────────────────────────────────────────────── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.2);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .sidebar { display: none; }
+      .main { padding: 1rem; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Web Crawler</h1>
-    <p class="sub">POST /crawl with a url. <a href="/docs">swagger</a></p>
+<div class="shell">
 
-    <div id="msg" class="banner" role="status"></div>
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9" opacity=".4"/>
+        <line x1="12" y1="3" x2="12" y2="1"/><line x1="12" y1="23" x2="12" y2="21"/>
+        <line x1="3" y1="12" x2="1" y2="12"/><line x1="23" y1="12" x2="21" y2="12"/>
+      </svg>
+      WebCrawler
+    </div>
+    <div class="nav-item active" data-page="single">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Single Crawl
+    </div>
+    <div class="nav-item" data-page="batch">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8"/><path d="M12 3v4"/></svg>
+      Batch Crawl
+    </div>
+    <div class="nav-sep"></div>
+    <div class="nav-item" data-page="cache">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3S3 13.66 3 12"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+      Cache
+    </div>
+    <div class="nav-item" onclick="window.open('/docs','_blank')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      API Docs ↗
+    </div>
+  </nav>
 
-    <form id="f">
-      <input type="url" name="url" placeholder="https://example.com" required autocomplete="url" />
-      <button type="submit" id="go">Crawl</button>
-    </form>
+  <!-- ── Main ── -->
+  <main class="main">
 
-    <div class="out"><pre id="out">{}</pre></div>
+    <!-- ══ Single Crawl page ══ -->
+    <section id="page-single" class="page active">
+      <div class="page-title">Single URL Crawl</div>
+      <div class="page-sub">Enter any URL — get metadata, topics, links, images and more.</div>
 
-    <footer>Health: <a href="/health">/health</a></footer>
-  </div>
-  <script>
-    const f = document.getElementById("f");
-    const go = document.getElementById("go");
-    const out = document.getElementById("out");
-    const msg = document.getElementById("msg");
+      <div id="single-banner" class="banner"></div>
 
-    function showMsg(text, ok) {
-      msg.textContent = text;
-      msg.className = "banner show " + (ok ? "ok" : "err");
-    }
-    function hideMsg() {
-      msg.className = "banner";
-      msg.textContent = "";
-    }
+      <form id="single-form">
+        <div class="input-row">
+          <input type="url" id="single-url" placeholder="https://example.com" required autocomplete="url" />
+          <button class="btn btn-primary" type="submit" id="single-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Crawl
+          </button>
+        </div>
+        <div class="opt-row">
+          <label class="opt-label">
+            <input type="checkbox" id="single-cache" checked /> Use cache
+          </label>
+          <label class="opt-label">
+            Timeout: <input type="number" id="single-timeout" value="45" min="5" max="120" style="width:60px;"> s
+          </label>
+        </div>
+      </form>
 
-    f.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      hideMsg();
-      const url = new FormData(f).get("url");
-      go.disabled = true;
-      out.textContent = "…";
-      try {
-        const r = await fetch("/crawl", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-        });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) {
-          const detail = data.detail != null ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : r.statusText;
-          showMsg(detail || "Request failed", false);
-          out.textContent = JSON.stringify(data, null, 2);
-          return;
-        }
-        showMsg("OK — " + (data.final_url || url), true);
-        out.textContent = JSON.stringify(data, null, 2);
-      } catch (err) {
-        showMsg(String(err), false);
-        out.textContent = "{}";
-      } finally {
-        go.disabled = false;
-      }
+      <div id="single-result" style="display:none">
+        <!-- overview strip -->
+        <div id="single-strip" class="card" style="margin-bottom:.75rem"></div>
+
+        <div class="tabs" id="single-tabs">
+          <div class="tab active" data-tab="overview">Overview</div>
+          <div class="tab" data-tab="topics">Topics</div>
+          <div class="tab" data-tab="links">Links</div>
+          <div class="tab" data-tab="images">Images</div>
+          <div class="tab" data-tab="raw">Raw JSON</div>
+        </div>
+
+        <div class="tab-panel active" id="tp-overview"></div>
+        <div class="tab-panel" id="tp-topics"></div>
+        <div class="tab-panel" id="tp-links"></div>
+        <div class="tab-panel" id="tp-images"></div>
+        <div class="tab-panel" id="tp-raw"></div>
+      </div>
+    </section>
+
+    <!-- ══ Batch Crawl page ══ -->
+    <section id="page-batch" class="page" style="display:none">
+      <div class="page-title">Batch Crawl</div>
+      <div class="page-sub">Enter up to 50 URLs (one per line) — crawled concurrently.</div>
+
+      <div id="batch-banner" class="banner"></div>
+
+      <form id="batch-form">
+        <textarea id="batch-urls" placeholder="https://example.com&#10;https://news.ycombinator.com&#10;https://en.wikipedia.org/wiki/Python_(programming_language)"></textarea>
+        <div class="opt-row" style="margin-top:.6rem">
+          <label class="opt-label">
+            Concurrency: <strong id="conc-val">5</strong>
+            <input type="range" id="batch-conc" min="1" max="20" value="5">
+          </label>
+          <label class="opt-label">
+            Timeout: <input type="number" id="batch-timeout" value="45" min="5" max="120" style="width:60px;"> s
+          </label>
+          <button class="btn btn-primary" type="submit" id="batch-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8"/></svg>
+            Crawl All
+          </button>
+        </div>
+      </form>
+
+      <div id="batch-result" style="display:none">
+        <div id="batch-stats" class="stats-row"></div>
+        <div id="batch-list"></div>
+      </div>
+    </section>
+
+    <!-- ══ Cache page ══ -->
+    <section id="page-cache" class="page" style="display:none">
+      <div class="page-title">Cache</div>
+      <div class="page-sub">Inspect and manage the crawler's result cache.</div>
+
+      <div id="cache-banner" class="banner"></div>
+
+      <div id="cache-stats-wrap" class="cache-stats" style="margin-bottom:1rem"></div>
+
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="btn btn-ghost" id="cache-refresh-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh Stats
+        </button>
+        <button class="btn btn-danger" id="cache-clear-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          Clear All Cache
+        </button>
+      </div>
+
+      <div class="card" style="margin-top:1rem">
+        <div class="card-title">Evict a single URL</div>
+        <div class="input-row">
+          <input type="url" id="evict-url" placeholder="https://example.com" style="flex:1 1 16rem" />
+          <button class="btn btn-ghost" id="evict-btn">Evict</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+/* ──────────────────────────────────────────────────────────────
+   Navigation
+────────────────────────────────────────────────────────────── */
+document.querySelectorAll(".nav-item[data-page]").forEach(el => {
+  el.addEventListener("click", () => {
+    const id = el.dataset.page;
+    document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+    el.classList.add("active");
+    document.querySelectorAll(".page").forEach(p => p.style.display = "none");
+    document.getElementById("page-" + id).style.display = "block";
+    if (id === "cache") loadCacheStats();
+  });
+});
+
+/* ──────────────────────────────────────────────────────────────
+   Tab switching (single crawl)
+────────────────────────────────────────────────────────────── */
+document.getElementById("single-tabs").addEventListener("click", e => {
+  const tab = e.target.closest(".tab");
+  if (!tab) return;
+  document.querySelectorAll("#single-tabs .tab").forEach(t => t.classList.remove("active"));
+  tab.classList.add("active");
+  const name = tab.dataset.tab;
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.getElementById("tp-" + name).classList.add("active");
+});
+
+/* ──────────────────────────────────────────────────────────────
+   Concurrency slider label
+────────────────────────────────────────────────────────────── */
+document.getElementById("batch-conc").addEventListener("input", e => {
+  document.getElementById("conc-val").textContent = e.target.value;
+});
+
+/* ──────────────────────────────────────────────────────────────
+   Helpers
+────────────────────────────────────────────────────────────── */
+function banner(id, msg, type) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = "banner show " + type;
+}
+function hideBanner(id) {
+  const el = document.getElementById(id);
+  el.className = "banner";
+}
+function esc(s) {
+  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function colorBar(score) {
+  if (score >= 0.6) return "#58a6ff";
+  if (score >= 0.3) return "#3fb950";
+  return "#d29922";
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Render single result
+────────────────────────────────────────────────────────────── */
+function renderSingle(d) {
+  /* strip */
+  const cacheTag = d.from_cache
+    ? `<span class="badge badge-cache">⚡ cached ${d.cached_at ? '· ' + new Date(d.cached_at).toLocaleTimeString() : ''}</span>`
+    : '';
+  document.getElementById("single-strip").innerHTML = `
+    <div style="display:flex;gap:.75rem;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:1rem;font-weight:700;margin-bottom:.15rem">${esc(d.title || "(no title)")}</div>
+        <a href="${esc(d.final_url)}" target="_blank" style="color:var(--muted);font-size:.78rem;word-break:break-all">${esc(d.final_url)}</a>
+        <div style="margin-top:.4rem;display:flex;gap:.35rem;flex-wrap:wrap">
+          <span class="badge badge-blue">${esc(d.page_category)}</span>
+          <span class="badge ${d.status_code < 300 ? 'badge-green' : 'badge-yellow'}">HTTP ${d.status_code}</span>
+          ${cacheTag}
+          <span class="badge badge-blue">${d.word_count.toLocaleString()} words</span>
+        </div>
+      </div>
+    </div>`;
+
+  /* overview */
+  const rows = [
+    ["Title",       d.title],
+    ["Description", d.description],
+    ["Author",      d.author],
+    ["Language",    d.language],
+    ["Keywords",    d.keywords],
+    ["Charset",     d.charset],
+    ["Canonical",   d.canonical],
+    ["Robots",      d.robots],
+  ].filter(([,v]) => v);
+
+  const ogRows = Object.entries(d.og || {});
+  const twRows = Object.entries(d.twitter || {});
+  const h1s    = (d.headings?.h1 || []).slice(0,3);
+
+  document.getElementById("tp-overview").innerHTML = `
+    <div class="card">
+      <div class="card-title">Meta Tags</div>
+      <div class="meta-grid">
+        ${rows.map(([k,v]) => `
+          <div class="meta-cell">
+            <div class="meta-key">${esc(k)}</div>
+            <div class="meta-val">${esc(v)}</div>
+          </div>`).join("")}
+      </div>
+    </div>
+    ${ogRows.length ? `<div class="card">
+      <div class="card-title">Open Graph</div>
+      <div class="meta-grid">
+        ${ogRows.map(([k,v]) => `
+          <div class="meta-cell">
+            <div class="meta-key">og:${esc(k)}</div>
+            <div class="meta-val">${k==="image" ? `<img src="${esc(v)}" style="max-width:100%;border-radius:6px;margin-top:.25rem" onerror="this.style.display='none'">` : esc(v)}</div>
+          </div>`).join("")}
+      </div>
+    </div>` : ""}
+    ${twRows.length ? `<div class="card">
+      <div class="card-title">Twitter Card</div>
+      <div class="meta-grid">
+        ${twRows.map(([k,v]) => `<div class="meta-cell"><div class="meta-key">twitter:${esc(k)}</div><div class="meta-val">${esc(v)}</div></div>`).join("")}
+      </div>
+    </div>` : ""}
+    ${h1s.length ? `<div class="card">
+      <div class="card-title">H1 Headings</div>
+      ${h1s.map(h => `<div style="padding:.25rem 0;border-bottom:1px solid var(--border);font-size:.9rem">${esc(h)}</div>`).join("")}
+    </div>` : ""}`;
+
+  /* topics */
+  const scores = Object.entries(d.topic_scores || {});
+  const maxScore = scores.length ? Math.max(...scores.map(([,s])=>s)) : 1;
+  document.getElementById("tp-topics").innerHTML = scores.length ? `
+    <div class="card">
+      <div class="card-title">Page Category — <span class="badge badge-blue">${esc(d.page_category)}</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Topic Scores</div>
+      <div class="topic-list">
+        ${scores.map(([topic, score]) => `
+          <div class="topic-row">
+            <div class="topic-name">${esc(topic)}</div>
+            <div class="topic-bar-wrap">
+              <div class="topic-bar" style="width:${Math.round((score/maxScore)*100)}%;background:${colorBar(score/maxScore)}"></div>
+            </div>
+            <div class="topic-pct">${Math.round(score*100)}%</div>
+          </div>`).join("")}
+      </div>
+    </div>` : `<div class="card"><div style="color:var(--muted)">No topics detected.</div></div>`;
+
+  /* links */
+  const links = d.links || [];
+  document.getElementById("tp-links").innerHTML = `
+    <div class="card">
+      <div class="card-title">${links.length} Links</div>
+      ${links.length ? `<div style="overflow:auto"><table class="link-table">
+        <thead><tr><th>URL</th><th>Text</th><th>Type</th></tr></thead>
+        <tbody>${links.slice(0,100).map(l => `
+          <tr>
+            <td><a href="${esc(l.href)}" target="_blank" style="color:var(--accent)">${esc(l.href.length>60 ? l.href.slice(0,60)+"…" : l.href)}</a></td>
+            <td style="color:var(--muted)">${esc(l.text.slice(0,60))}</td>
+            <td><span class="ext-badge ${l.is_external ? 'ext-yes' : 'ext-no'}">${l.is_external ? "external" : "internal"}</span></td>
+          </tr>`).join("")}
+        </tbody>
+      </table></div>${links.length>100 ? `<div style="color:var(--muted);font-size:.78rem;margin-top:.5rem">Showing 100 of ${links.length}</div>` : ""}` : `<div style="color:var(--muted)">No links found.</div>`}
+    </div>`;
+
+  /* images */
+  const imgs = d.images || [];
+  document.getElementById("tp-images").innerHTML = `
+    <div class="card">
+      <div class="card-title">${imgs.length} Images</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.6rem">
+        ${imgs.slice(0,30).map(i => `
+          <div style="background:var(--tag-bg);border-radius:8px;overflow:hidden">
+            <img src="${esc(i.src)}" alt="${esc(i.alt)}" loading="lazy"
+              style="width:100%;height:90px;object-fit:cover"
+              onerror="this.style.display='none'">
+            <div style="padding:.3rem .4rem;font-size:.72rem;color:var(--muted);word-break:break-all">${esc(i.alt || "(no alt)")}</div>
+          </div>`).join("")}
+      </div>
+    </div>`;
+
+  /* raw */
+  document.getElementById("tp-raw").innerHTML = `
+    <div class="json-out"><pre>${esc(JSON.stringify(d, null, 2))}</pre></div>`;
+
+  document.getElementById("single-result").style.display = "block";
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Single crawl form
+────────────────────────────────────────────────────────────── */
+document.getElementById("single-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  hideBanner("single-banner");
+  const url     = document.getElementById("single-url").value;
+  const cache   = document.getElementById("single-cache").checked;
+  const timeout = +document.getElementById("single-timeout").value;
+  const btn     = document.getElementById("single-btn");
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Crawling…`;
+  document.getElementById("single-result").style.display = "none";
+
+  try {
+    const r    = await fetch(`/crawl?use_cache=${cache}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, timeout }),
     });
-  </script>
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      banner("single-banner", data.detail || r.statusText, "err");
+      return;
+    }
+    banner("single-banner", `✓ ${data.from_cache ? "Cache hit" : "Crawled"} — ${data.final_url}`, "ok");
+    renderSingle(data);
+  } catch (err) {
+    banner("single-banner", String(err), "err");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Crawl`;
+  }
+});
+
+/* ──────────────────────────────────────────────────────────────
+   Batch crawl form
+────────────────────────────────────────────────────────────── */
+document.getElementById("batch-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  hideBanner("batch-banner");
+  const raw     = document.getElementById("batch-urls").value;
+  const urls    = raw.split("\n").map(u => u.trim()).filter(Boolean);
+  const conc    = +document.getElementById("batch-conc").value;
+  const timeout = +document.getElementById("batch-timeout").value;
+  const btn     = document.getElementById("batch-btn");
+
+  if (!urls.length) { banner("batch-banner","Enter at least one URL.","err"); return; }
+  if (urls.length > 50) { banner("batch-banner","Max 50 URLs.","err"); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Crawling ${urls.length} URL${urls.length>1?"s":""}…`;
+  document.getElementById("batch-result").style.display = "none";
+
+  try {
+    const r    = await fetch("/crawl/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ urls, concurrency: conc, timeout }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { banner("batch-banner", data.detail || r.statusText, "err"); return; }
+
+    banner("batch-banner",
+      `✓ Done in ${data.duration_seconds}s — ${data.succeeded} ok · ${data.cached} cached · ${data.failed} failed`,
+      "ok");
+
+    /* stats row */
+    document.getElementById("batch-stats").innerHTML = [
+      [data.total,    "Total"],
+      [data.succeeded,"Succeeded"],
+      [data.cached,   "Cached"],
+      [data.failed,   "Failed"],
+      [data.duration_seconds + "s", "Duration"],
+    ].map(([v,l]) => `<div class="stat-box"><div class="stat-num">${v}</div><div class="stat-lbl">${l}</div></div>`).join("");
+
+    /* result list */
+    document.getElementById("batch-list").innerHTML = data.results.map(item => {
+      const d = item.data;
+      const dotClass = item.status === "ok" ? "dot-ok" : item.status === "cached" ? "dot-cached" : "dot-error";
+      const topics = d ? (d.topics||[]).slice(0,4).map(t =>
+        `<span class="badge badge-blue" style="font-size:.7rem">${esc(t)}</span>`).join("") : "";
+      return `<div class="batch-item">
+        <div class="batch-dot ${dotClass}"></div>
+        <div style="flex:1;min-width:0">
+          <div class="batch-title">${esc(d?.title || item.error || item.url)}</div>
+          <div class="batch-url">${esc(item.url)}</div>
+          ${d ? `<div class="batch-meta">
+            <span class="badge badge-blue">${esc(d.page_category)}</span>
+            <span class="badge badge-green">HTTP ${d.status_code}</span>
+            ${item.status==="cached" ? '<span class="badge badge-cache">⚡ cached</span>' : ""}
+            ${topics}
+          </div>` : ""}
+        </div>
+      </div>`;
+    }).join("");
+
+    document.getElementById("batch-result").style.display = "block";
+  } catch (err) {
+    banner("batch-banner", String(err), "err");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8"/></svg> Crawl All`;
+  }
+});
+
+/* ──────────────────────────────────────────────────────────────
+   Cache page
+────────────────────────────────────────────────────────────── */
+async function loadCacheStats() {
+  try {
+    const r = await fetch("/cache/stats");
+    const d = await r.json();
+    document.getElementById("cache-stats-wrap").innerHTML = [
+      [d.backend,       "Backend"],
+      [d.entries,       "Cached Entries"],
+      [d.ttl_seconds+"s","TTL"],
+      [d.max_size ?? "∞","Max Size"],
+    ].map(([v,k]) => `<div class="cs-box"><div class="cs-val">${esc(v)}</div><div class="cs-key">${k}</div></div>`).join("");
+  } catch {}
+}
+
+document.getElementById("cache-refresh-btn").addEventListener("click", loadCacheStats);
+
+document.getElementById("cache-clear-btn").addEventListener("click", async () => {
+  if (!confirm("Clear the entire cache?")) return;
+  await fetch("/cache", { method: "DELETE" });
+  banner("cache-banner", "Cache cleared.", "ok");
+  loadCacheStats();
+});
+
+document.getElementById("evict-btn").addEventListener("click", async () => {
+  const url = document.getElementById("evict-url").value.trim();
+  if (!url) return;
+  await fetch("/cache/url?url=" + encodeURIComponent(url), { method: "DELETE" });
+  banner("cache-banner", `Evicted: ${url}`, "info");
+});
+</script>
 </body>
 </html>
