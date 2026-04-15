@@ -11,10 +11,13 @@ from crawler.models.schemas import (
     BatchCrawlResponse,
     CacheStatsResponse,
     CrawlRequest,
+    DeepCrawlRequest,
+    DeepCrawlResponse,
     PageMetadata,
 )
 from crawler.services.batch_service import crawl_batch
 from crawler.services.crawl_service import crawl_url
+from crawler.services.deep_crawl_service import deep_crawl
 
 router = APIRouter()
 
@@ -48,6 +51,21 @@ def crawl_one(
 
     cache.set(url, out)
     return out
+
+
+@router.post("/crawl/deep", response_model=DeepCrawlResponse, tags=["crawl"])
+async def crawl_deep(request: DeepCrawlRequest) -> DeepCrawlResponse:
+    # BFS crawler — starts at seed_url, follows links level by level up to max_depth.
+    # respects max_pages so it doesn't crawl an entire site by accident.
+    return await deep_crawl(
+        str(request.seed_url),
+        max_depth=request.max_depth,
+        max_pages=request.max_pages,
+        stay_on_domain=request.stay_on_domain,
+        concurrency=request.concurrency,
+        timeout=request.timeout,
+        follow_redirects=request.follow_redirects,
+    )
 
 
 @router.post("/crawl/batch", response_model=BatchCrawlResponse, tags=["crawl"])

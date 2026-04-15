@@ -97,3 +97,36 @@ class CacheStatsResponse(BaseModel):
     entries: int
     ttl_seconds: int
     max_size: Optional[int] = None  # None for Redis (no hard limit enforced by the app)
+
+
+class DeepCrawlRequest(BaseModel):
+    seed_url: HttpUrl
+    max_depth: int = Field(default=2, ge=1, le=5)       # how many link-hops from seed
+    max_pages: int = Field(default=20, ge=1, le=100)    # hard stop so it doesn't run forever
+    stay_on_domain: bool = True                          # don't follow links to other sites
+    concurrency: int = Field(default=3, ge=1, le=10)
+    timeout: float = Field(default=30.0, ge=1.0, le=120.0)
+    follow_redirects: bool = True
+
+
+class CrawledPage(BaseModel):
+    url: str
+    depth: int               # 0 = seed, 1 = one hop from seed, etc.
+    status: str              # "ok", "cached", "error"
+    data: Optional[PageMetadata] = None
+    error: Optional[str] = None
+
+
+class DeepCrawlStats(BaseModel):
+    pages_crawled: int
+    pages_failed: int
+    pages_cached: int
+    total_links_found: int
+    max_depth_reached: int
+    duration_seconds: float
+
+
+class DeepCrawlResponse(BaseModel):
+    seed_url: str
+    pages: List[CrawledPage]
+    stats: DeepCrawlStats
