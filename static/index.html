@@ -223,6 +223,35 @@
     .cs-val { font-size: 1.2rem; font-weight: 700; }
     .cs-key { font-size: 0.72rem; color: var(--muted); }
 
+    /* ── User Manual ─────────────────────────────────────────────── */
+    .guide-section { margin-bottom: 1.75rem; }
+    .guide-section h2 {
+      font-size: 0.95rem; font-weight: 700; margin-bottom: 0.6rem;
+      padding-bottom: 0.4rem; border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    .guide-section h3 { font-size: 0.86rem; font-weight: 600; margin: 0.85rem 0 0.3rem; color: var(--accent); }
+    .guide-section p  { font-size: 0.86rem; color: var(--muted); line-height: 1.65; margin-bottom: 0.5rem; }
+    .guide-section ul { padding-left: 1.25rem; }
+    .guide-section li { font-size: 0.85rem; color: var(--muted); line-height: 1.7; }
+    .guide-section li strong { color: var(--text); }
+    .mode-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+    .mode-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.85rem 1rem;
+    }
+    .mode-card-title { font-size: 0.88rem; font-weight: 700; margin-bottom: 0.35rem; }
+    .mode-card-body  { font-size: 0.81rem; color: var(--muted); line-height: 1.6; }
+    .mode-card.single { border-top: 3px solid var(--accent); }
+    .mode-card.batch  { border-top: 3px solid var(--accent2); }
+    .mode-card.deep   { border-top: 3px solid var(--warn); }
+    .guide-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 0.5rem; }
+    .guide-table th { text-align: left; padding: 0.4rem 0.6rem; color: var(--muted); border-bottom: 1px solid var(--border); font-size: 0.75rem; text-transform: uppercase; }
+    .guide-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(48,54,61,.4); vertical-align: top; }
+    .guide-table tr:last-child td { border-bottom: none; }
+    .guide-table td:first-child { color: var(--text); font-weight: 600; white-space: nowrap; }
+    .guide-code { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.85rem; font-size: 0.78rem; font-family: "SF Mono", "Fira Code", monospace; color: var(--accent2); margin: 0.4rem 0; overflow-x: auto; }
+
     /* ── Deep crawl ──────────────────────────────────────────────── */
     .depth-group { margin-bottom: 1rem; }
     .depth-header {
@@ -290,6 +319,10 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3S3 13.66 3 12"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
       Cache
     </div>
+    <div class="nav-item" data-page="guide">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      User Manual
+    </div>
     <div class="nav-item" onclick="window.open('/docs','_blank')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       API Docs ↗
@@ -302,7 +335,7 @@
     <!-- ══ Single Crawl page ══ -->
     <section id="page-single" class="page active">
       <div class="page-title">Single URL Crawl</div>
-      <div class="page-sub">Enter any URL — get metadata, topics, links, images and more.</div>
+      <div class="page-sub">Fetch one URL and extract everything — title, description, Open Graph tags, links, images, word count, and topic scores. Results are cached so the same URL comes back instantly on the next request.</div>
 
       <div id="single-banner" class="banner"></div>
 
@@ -347,7 +380,7 @@
     <!-- ══ Batch Crawl page ══ -->
     <section id="page-batch" class="page" style="display:none">
       <div class="page-title">Batch Crawl</div>
-      <div class="page-sub">Enter up to 50 URLs (one per line) — crawled concurrently.</div>
+      <div class="page-sub">Submit up to 50 URLs at once — they're fetched concurrently so the whole batch finishes in roughly the time of one slow request. Use this when you already know which pages you want. URLs already in cache return immediately without hitting the network.</div>
 
       <div id="batch-banner" class="banner"></div>
 
@@ -377,7 +410,7 @@
     <!-- ══ Deep Crawl page ══ -->
     <section id="page-deep" class="page" style="display:none">
       <div class="page-title">Deep Crawl</div>
-      <div class="page-sub">Start from a seed URL — follows links automatically, level by level.</div>
+      <div class="page-sub">True BFS web crawler — give it a starting URL and it automatically follows links, discovering new pages level by level. You control how deep it goes (max depth) and how many pages it visits (max pages). Enable "Stay on domain" to keep it from wandering off to other sites.</div>
 
       <div id="deep-banner" class="banner"></div>
 
@@ -411,6 +444,133 @@
         <div id="deep-stats" class="stats-row"></div>
         <div id="deep-list"></div>
       </div>
+    </section>
+
+    <!-- ══ User Manual page ══ -->
+    <section id="page-guide" class="page" style="display:none">
+      <div class="page-title">User Manual</div>
+      <div class="page-sub">How each crawl mode works, when to use which one, and how the system handles caching and topic scoring under the hood.</div>
+
+      <!-- ── Three modes overview ── -->
+      <div class="guide-section">
+        <h2>The Three Crawl Modes</h2>
+        <div class="mode-cards">
+          <div class="mode-card single">
+            <div class="mode-card-title" style="color:var(--accent)">Single Crawl</div>
+            <div class="mode-card-body">You give it one URL. It fetches that page, extracts everything — metadata, links, images, topics — and returns it. That's it. Nothing is followed automatically.</div>
+          </div>
+          <div class="mode-card batch">
+            <div class="mode-card-title" style="color:var(--accent2)">Batch Crawl</div>
+            <div class="mode-card-body">You give it a list of URLs you already know. All of them are fetched at the same time (up to the concurrency limit). Good when you have a specific set of pages to analyse.</div>
+          </div>
+          <div class="mode-card deep">
+            <div class="mode-card-title" style="color:var(--warn)">Deep Crawl</div>
+            <div class="mode-card-body">You give it one starting URL. It fetches it, finds all the links on that page, fetches those, finds more links, and keeps going — automatically — until it hits your depth or page limit.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── When to use which ── -->
+      <div class="guide-section">
+        <h2>When to Use Which</h2>
+        <table class="guide-table">
+          <thead><tr><th>Situation</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td>Checking one specific article or product page</td><td>Single Crawl</td></tr>
+            <tr><td>You have a spreadsheet of 20 URLs to check</td><td>Batch Crawl</td></tr>
+            <tr><td>You want to explore what's on a blog or docs site</td><td>Deep Crawl</td></tr>
+            <tr><td>Comparing metadata across competitor pages</td><td>Batch Crawl</td></tr>
+            <tr><td>Building a sitemap of a small site</td><td>Deep Crawl</td></tr>
+            <tr><td>Quick debugging / testing a single URL</td><td>Single Crawl</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ── Differences ── -->
+      <div class="guide-section">
+        <h2>Key Differences</h2>
+        <table class="guide-table">
+          <thead><tr><th></th><th>Single</th><th>Batch</th><th>Deep</th></tr></thead>
+          <tbody>
+            <tr><td>URLs needed upfront</td><td>1</td><td>1–50</td><td>1 (seed only)</td></tr>
+            <tr><td>Follows links?</td><td>No</td><td>No</td><td>Yes — BFS</td></tr>
+            <tr><td>Max pages</td><td>1</td><td>50</td><td>100</td></tr>
+            <tr><td>Max depth</td><td>—</td><td>—</td><td>5 hops</td></tr>
+            <tr><td>Domain scoping</td><td>—</td><td>—</td><td>Optional</td></tr>
+            <tr><td>Results grouped by</td><td>Tabs</td><td>URL order</td><td>Depth level</td></tr>
+            <tr><td>Good for</td><td>Inspection</td><td>Comparison</td><td>Discovery</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ── How Deep Crawl works ── -->
+      <div class="guide-section">
+        <h2>How Deep Crawl Works (BFS)</h2>
+        <p>Deep Crawl uses <strong>Breadth-First Search</strong>. It processes all pages at depth 1 before moving to depth 2, then all depth 2 before depth 3, and so on. This means shallower, more important pages are always crawled first.</p>
+        <div class="guide-code">Depth 0:  seed URL
+Depth 1:  all links found on seed
+Depth 2:  all new links found on depth-1 pages
+...and so on until max_depth or max_pages is reached</div>
+        <p>A <strong>visited set</strong> tracks every URL that's been seen. If the same URL appears on multiple pages at different depths, it's only crawled once — the first time it's encountered. This prevents infinite loops and duplicate work.</p>
+        <p>URL normalization strips fragments (<code>#section</code>) and trailing slashes so <code>/page</code> and <code>/page/</code> are treated as the same URL.</p>
+        <p><strong>Stay on domain</strong> — when enabled, any link pointing to a different domain is ignored. <code>rei.com</code> and <code>www.rei.com</code> are treated as the same domain so you don't miss internal links just because of a www prefix.</p>
+      </div>
+
+      <!-- ── Caching ── -->
+      <div class="guide-section">
+        <h2>How Caching Works</h2>
+        <p>Every successful crawl result is stored in the cache keyed by URL. On the next request for the same URL, the cached result is returned immediately — no network call, no parsing, no classification. This is why second requests are near-instant.</p>
+        <table class="guide-table">
+          <thead><tr><th>Backend</th><th>Where it lives</th><th>Survives restart?</th><th>Shared across instances?</th></tr></thead>
+          <tbody>
+            <tr><td>Memory (default)</td><td>RAM, inside the process</td><td>No</td><td>No</td></tr>
+            <tr><td>Redis</td><td>External Redis server</td><td>Yes</td><td>Yes</td></tr>
+          </tbody>
+        </table>
+        <p>The memory cache is an <strong>LRU (Least Recently Used)</strong> cache — when it fills up (default 500 entries), the entry that was accessed least recently gets evicted first. Each entry also has a TTL (default 1 hour) after which it expires automatically.</p>
+        <p>Set <code>REDIS_URL</code> in your environment to switch to Redis. Useful for production deployments where multiple instances run in parallel.</p>
+      </div>
+
+      <!-- ── Topic scoring ── -->
+      <div class="guide-section">
+        <h2>How Topic Scoring Works</h2>
+        <p>Each page is scored against 16 topics: technology, outdoors, finance, e-commerce, news, education, entertainment, travel, sports, politics, science, food, real-estate, automotive, healthcare, fashion.</p>
+        <p>The scoring process:</p>
+        <ul>
+          <li><strong>Tokenize</strong> — the page text (title, description, headings, body) is broken into unigrams, bigrams, and trigrams so phrases like "machine learning" match as a unit.</li>
+          <li><strong>TF scoring</strong> — each keyword match is weighted by its <em>term frequency</em> (how often it appears relative to total tokens). Long pages don't get an unfair advantage over short ones.</li>
+          <li><strong>Exclusivity weight</strong> — a keyword that only belongs to one topic gets 3× weight. A keyword shared by two topics gets 1×. Shared by three or more gets 0.4×. This prevents generic words like "research" from inflating multiple topics equally.</li>
+          <li><strong>Threshold</strong> — topics with a score below 0.08 are dropped from results to avoid noise.</li>
+        </ul>
+        <p>Page category is assigned separately — first by URL path hints (<code>/blog/</code>, <code>/shop/</code>, <code>/docs/</code>), then by body signals ("add to cart", "posted by", "breaking news"), then falls back to the top-scoring topic.</p>
+      </div>
+
+      <!-- ── WAF bypass ── -->
+      <div class="guide-section">
+        <h2>Why Some Sites Return 403 (and How It's Handled)</h2>
+        <p>Sites like Amazon, REI, and others protected by Akamai or Cloudflare inspect the TLS fingerprint of every connection. Python's default HTTP libraries have a fingerprint that's instantly recognisable as non-browser traffic, so they return 403 before even looking at your request.</p>
+        <p>This crawler uses <code>curl-cffi</code> with <code>impersonate="chrome124"</code> to mimic Chrome 124's TLS handshake at the binary level. Combined with a full Chrome header set (including <code>Sec-Fetch-*</code> and <code>Sec-CH-UA</code> headers), the requests look identical to a real browser from the server's perspective.</p>
+        <p>If <code>curl-cffi</code> isn't available, it falls back to <code>httpx</code> with retry logic for 429/503 responses.</p>
+      </div>
+
+      <!-- ── API quick ref ── -->
+      <div class="guide-section">
+        <h2>API Quick Reference</h2>
+        <table class="guide-table">
+          <thead><tr><th>Endpoint</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>POST /crawl</td><td>Scrape a single URL. Add <code>?use_cache=false</code> to force a fresh fetch.</td></tr>
+            <tr><td>POST /crawl/batch</td><td>Scrape up to 50 URLs concurrently. Returns results in input order.</td></tr>
+            <tr><td>POST /crawl/deep</td><td>BFS crawl from a seed URL. Follows links automatically.</td></tr>
+            <tr><td>GET /cache/stats</td><td>Shows cache backend, entry count, and TTL.</td></tr>
+            <tr><td>DELETE /cache</td><td>Wipes the entire cache.</td></tr>
+            <tr><td>DELETE /cache/url?url=…</td><td>Removes one specific URL from the cache.</td></tr>
+            <tr><td>GET /health</td><td>Liveness check — also confirms which cache backend is active.</td></tr>
+            <tr><td>GET /docs</td><td>Interactive Swagger UI for the full API.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
     </section>
 
     <!-- ══ Cache page ══ -->
