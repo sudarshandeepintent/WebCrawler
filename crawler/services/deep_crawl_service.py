@@ -72,6 +72,16 @@ async def deep_crawl(
     timeout: float = 30.0,
     follow_redirects: bool = True,
 ) -> DeepCrawlResponse:
+    """BFS web crawler starting from seed_url.
+
+    Processes pages level by level — all depth-1 pages before any depth-2 page.
+    Stops when max_pages is reached or the frontier is exhausted.
+    URLs are normalized (fragment stripped, trailing slash removed) before being
+    added to the visited set to prevent duplicate fetches.
+
+    If stay_on_domain is True, links pointing outside the seed URL's domain are
+    ignored. www and non-www variants of the same domain are treated as equal.
+    """
     t0 = time.perf_counter()
     seed_host = urlparse(seed_url).netloc
 

@@ -38,6 +38,15 @@ def _squash_ws(s: str) -> str:
 
 
 def parse_page(fetch_result: FetchResult) -> PageMetadata:
+    """Parse raw HTML from a FetchResult into a PageMetadata object.
+
+    Extracts: title, standard meta tags, Open Graph, Twitter Card, headings
+    (h1–h6), deduplicated links with external flag, images (src + alt),
+    and cleaned body text with word count.
+
+    Body text skips script/style/nav/header/footer nodes so the output is
+    suitable for topic classification without menu/footer noise.
+    """
     soup = BeautifulSoup(fetch_result.html, "lxml")
     base = fetch_result.final_url  # use final_url so relative links resolve correctly after redirects
     base_host = urlparse(base).netloc

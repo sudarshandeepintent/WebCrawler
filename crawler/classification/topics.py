@@ -249,6 +249,15 @@ def _guess_category(url: str, body_lower: str, title: str, top_topics: List[str]
 
 
 def classify_page(meta: PageMetadata) -> PageMetadata:
+    """Score a page against 16 topics and assign a page_category.
+
+    Builds a weighted text blob (title × 5, description × 4, headings × 3,
+    body × 1), tokenizes into unigrams/bigrams/trigrams, scores each topic
+    using TF × exclusivity weight, filters below MIN_SCORE, then detects
+    category via URL path hints → body signals → top topic fallback.
+
+    Modifies and returns the same meta object.
+    """
     # build the text blob, weighting important fields more heavily.
     # title × 5 and description × 4 because those are the most intentional
     # signals about what the page is — the author chose those words specifically.
