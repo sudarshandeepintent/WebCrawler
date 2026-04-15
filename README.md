@@ -1,19 +1,20 @@
 # WebCrawler
 
-A full-stack web crawling API built with FastAPI. Give it any URL and it fetches the page, extracts metadata (title, description, Open Graph, Twitter Card, headings, links, images), runs topic classification across 16 categories, and returns everything as clean JSON. Comes with a built-in dashboard UI, async batch crawling for up to 50 URLs at once, and a Redis-backed caching layer.
+A web crawling and scraping API I built with FastAPI. Point it at any URL and it fetches the page, pulls out all the useful metadata (title, description, Open Graph, Twitter Card, headings, links, images), runs topic classification across 16 categories, and gives you everything back as clean JSON.
 
-Live demo deployed on Google Cloud Run.
+It supports three modes — single URL scrape, async batch crawl for a list of known URLs, and a true BFS deep crawler that follows links automatically across a site. There's a built-in dashboard UI, a Redis-backed cache, and it's deployed on Google Cloud Run.
 
 ---
 
 ## Features
 
-- **Single URL crawl** — title, description, OG tags, Twitter Card, headings, links, images, word count, page category, topic scores
-- **Batch crawl** — submit up to 50 URLs, crawled concurrently with a configurable semaphore
-- **Topic classification** — 16 topics (technology, outdoors, finance, e-commerce, news, sports, etc.) scored by TF-weighted keyword matching
-- **Smart caching** — in-memory LRU cache by default, Redis when `REDIS_URL` is set; cache hits return in < 5 ms
-- **WAF bypass** — uses `curl-cffi` with Chrome 124 TLS fingerprint impersonation to get past Akamai/Cloudflare bot detection
-- **Dashboard UI** — dark-mode single-page app with tabs for Overview, Topics, Links, Images, Raw JSON — available at `/`
+- **Single URL scrape** — title, description, OG tags, Twitter Card, headings, links, images, word count, fetch duration, topic scores
+- **Batch crawl** — up to 50 URLs submitted at once, fetched concurrently using asyncio + semaphore
+- **Deep crawl** — BFS crawler that starts at a seed URL and follows links level by level; configurable max depth, max pages, and domain scoping
+- **Topic classification** — 16 topics (technology, outdoors, finance, e-commerce, news, sports, etc.) scored with TF-weighted keyword matching and exclusivity weighting
+- **Smart caching** — in-process LRU cache by default, Redis when `REDIS_URL` is set; cache hits skip the network entirely
+- **WAF bypass** — `curl-cffi` with Chrome 124 TLS fingerprint impersonation gets through Akamai/Cloudflare bot detection
+- **Dashboard UI** — dark-mode single-page app with tabs, expandable results, and a built-in user guide — available at `/`
 - **OpenAPI docs** — auto-generated at `/docs`
 
 ---
@@ -57,6 +58,16 @@ curl -X POST http://localhost:8000/crawl/batch \
       "https://en.wikipedia.org/wiki/Python_(programming_language)"
     ],
     "concurrency": 2
+  }'
+
+# Deep crawl — follows links automatically from the seed URL
+curl -X POST http://localhost:8000/crawl/deep \
+  -H "Content-Type: application/json" \
+  -d '{
+    "seed_url": "https://en.wikipedia.org/wiki/Web_crawler",
+    "max_depth": 2,
+    "max_pages": 15,
+    "stay_on_domain": true
   }'
 ```
 
@@ -177,6 +188,62 @@ Limits: `urls` 1–50, `concurrency` 1–20.
 ```
 
 `status` is one of `ok`, `cached`, `error`.
+
+---
+
+### `POST /crawl/deep`
+
+BFS deep crawler — starts at `seed_url`, follows internal links level by level until it hits `max_depth` or `max_pages`.
+
+**Request body**
+
+```json
+{
+  "seed_url": "https://example.com/blog",
+  "max_depth": 2,
+  "max_pages": 20,
+  "stay_on_domain": true,
+  "concurrency": 3,
+  "timeout": 30,
+  "follow_redirects": true
+}
+```
+
+Limits: `max_depth` 1–5, `max_pages` 1–100, `concurrency` 1–10.
+
+**Response** — `DeepCrawlResponse`
+
+```json
+{
+  "seed_url": "https://example.com/blog",
+  "pages": [
+    {
+      "url": "https://example.com/blog",
+      "depth": 0,
+      "status": "ok",
+      "data": { ... },
+      "error": null
+    },
+    {
+      "url": "https://example.com/blog/post-1",
+      "depth": 1,
+      "status": "ok",
+      "data": { ... },
+      "error": null
+    }
+  ],
+  "stats": {
+    "pages_crawled": 12,
+    "pages_failed": 1,
+    "pages_cached": 3,
+    "total_links_found": 148,
+    "max_depth_reached": 2,
+    "duration_seconds": 18.4
+  }
+}
+```
+
+`status` per page is one of `ok`, `cached`, `error`.
 
 ---
 
@@ -327,7 +394,8 @@ WebCrawler/
 │   │   └── topics.py                # TF-based topic scoring + category detection
 │   ├── services/
 │   │   ├── crawl_service.py         # Single URL: fetch → parse → classify → cache
-│   │   └── batch_service.py         # Batch: asyncio.gather + semaphore
+│   │   ├── batch_service.py         # Batch: asyncio.gather + semaphore
+│   │   └── deep_crawl_service.py    # BFS crawler: frontier queue + visited set + domain scoping
 │   ├── infrastructure/
 │   │   └── cache.py                 # MemoryCache (LRU + TTL) and RedisCache
 │   └── models/
