@@ -420,3 +420,7 @@ WebCrawler/
 | Cache (remote) | Redis via `redis-py` |
 | Tests | pytest |
 | Deployment | Docker + Google Cloud Run |
+
+Some ScreenShots ->
+<img width="1666" height="794" alt="Screenshot 2026-04-15 at 4 03 03 PM" src="https://github.com/user-attachments/assets/34782fd5-c7b4-4216-aa91-cb8b8e4f8153" />
+
