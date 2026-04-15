@@ -223,6 +223,27 @@
     .cs-val { font-size: 1.2rem; font-weight: 700; }
     .cs-key { font-size: 0.72rem; color: var(--muted); }
 
+    /* ── Deep crawl ──────────────────────────────────────────────── */
+    .depth-group { margin-bottom: 1rem; }
+    .depth-header {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.78rem; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .06em;
+      margin-bottom: 0.4rem; padding-bottom: 0.3rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .depth-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 50%;
+      font-size: 0.72rem; font-weight: 700; flex-shrink: 0;
+    }
+    .depth-0 { background: rgba(88,166,255,.2);  color: var(--accent); }
+    .depth-1 { background: rgba(63,185,80,.2);   color: var(--accent2); }
+    .depth-2 { background: rgba(210,153,34,.2);  color: var(--warn); }
+    .depth-3 { background: rgba(248,81,73,.2);   color: var(--err); }
+    .depth-4 { background: rgba(139,148,158,.2); color: var(--muted); }
+    .depth-5 { background: rgba(139,148,158,.15);color: var(--muted); }
+
     /* ── Spinner ─────────────────────────────────────────────────── */
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner {
@@ -259,6 +280,10 @@
     <div class="nav-item" data-page="batch">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8"/><path d="M12 3v4"/></svg>
       Batch Crawl
+    </div>
+    <div class="nav-item" data-page="deep">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      Deep Crawl
     </div>
     <div class="nav-sep"></div>
     <div class="nav-item" data-page="cache">
@@ -346,6 +371,45 @@
       <div id="batch-result" style="display:none">
         <div id="batch-stats" class="stats-row"></div>
         <div id="batch-list"></div>
+      </div>
+    </section>
+
+    <!-- ══ Deep Crawl page ══ -->
+    <section id="page-deep" class="page" style="display:none">
+      <div class="page-title">Deep Crawl</div>
+      <div class="page-sub">Start from a seed URL — follows links automatically, level by level.</div>
+
+      <div id="deep-banner" class="banner"></div>
+
+      <form id="deep-form">
+        <div class="input-row">
+          <input type="url" id="deep-url" placeholder="https://example.com/blog" required autocomplete="url" />
+          <button class="btn btn-primary" type="submit" id="deep-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+            Start Crawl
+          </button>
+        </div>
+        <div class="opt-row">
+          <label class="opt-label">
+            Max Depth: <strong id="deep-depth-val">2</strong>
+            <input type="range" id="deep-depth" min="1" max="5" value="2">
+          </label>
+          <label class="opt-label">
+            Max Pages: <input type="number" id="deep-pages" value="20" min="1" max="100" style="width:60px;">
+          </label>
+          <label class="opt-label">
+            Concurrency: <strong id="deep-conc-val">3</strong>
+            <input type="range" id="deep-conc" min="1" max="10" value="3">
+          </label>
+          <label class="opt-label">
+            <input type="checkbox" id="deep-domain" checked /> Stay on domain
+          </label>
+        </div>
+      </form>
+
+      <div id="deep-result" style="display:none">
+        <div id="deep-stats" class="stats-row"></div>
+        <div id="deep-list"></div>
       </div>
     </section>
 
@@ -757,6 +821,187 @@ document.getElementById("batch-form").addEventListener("submit", async e => {
     btn.disabled = false;
     btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8"/></svg> Crawl All`;
   }
+});
+
+/* ──────────────────────────────────────────────────────────────
+   Deep crawl sliders
+────────────────────────────────────────────────────────────── */
+document.getElementById("deep-depth").addEventListener("input", e => {
+  document.getElementById("deep-depth-val").textContent = e.target.value;
+});
+document.getElementById("deep-conc").addEventListener("input", e => {
+  document.getElementById("deep-conc-val").textContent = e.target.value;
+});
+
+/* ──────────────────────────────────────────────────────────────
+   Deep crawl form
+────────────────────────────────────────────────────────────── */
+document.getElementById("deep-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  hideBanner("deep-banner");
+  const url   = document.getElementById("deep-url").value;
+  const depth = +document.getElementById("deep-depth").value;
+  const pages = +document.getElementById("deep-pages").value;
+  const conc  = +document.getElementById("deep-conc").value;
+  const dom   = document.getElementById("deep-domain").checked;
+  const btn   = document.getElementById("deep-btn");
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Crawling…`;
+  document.getElementById("deep-result").style.display = "none";
+
+  try {
+    const r = await fetch("/crawl/deep", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        seed_url: url, max_depth: depth, max_pages: pages,
+        concurrency: conc, stay_on_domain: dom
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { banner("deep-banner", data.detail || r.statusText, "err"); return; }
+
+    const s = data.stats;
+    banner("deep-banner",
+      `✓ Done in ${s.duration_seconds}s — ${s.pages_crawled} pages · depth ${s.max_depth_reached} · ${s.total_links_found} links found`,
+      "ok");
+
+    /* stats row */
+    document.getElementById("deep-stats").innerHTML = [
+      [s.pages_crawled,       "Pages Crawled"],
+      [s.pages_failed,        "Failed"],
+      [s.pages_cached,        "Cached"],
+      [s.total_links_found,   "Links Found"],
+      [s.max_depth_reached,   "Max Depth"],
+      [s.duration_seconds+"s","Duration"],
+    ].map(([v,l]) => `<div class="stat-box"><div class="stat-num">${v}</div><div class="stat-lbl">${l}</div></div>`).join("");
+
+    /* group pages by depth */
+    const byDepth = {};
+    data.pages.forEach(p => {
+      (byDepth[p.depth] = byDepth[p.depth] || []).push(p);
+    });
+
+    /* reuse the same expandable item renderer as batch but with a depth badge */
+    let globalIdx = 0;
+    document.getElementById("deep-list").innerHTML = Object.keys(byDepth)
+      .sort((a,b) => a - b)
+      .map(dep => {
+        const depClass = `depth-${Math.min(+dep, 5)}`;
+        const items = byDepth[dep].map(item => {
+          const idx = globalIdx++;
+          const d = item.data;
+          const dotClass = item.status === "ok" ? "dot-ok" : item.status === "cached" ? "dot-cached" : "dot-error";
+          const topics = d ? (d.topics||[]).slice(0,3).map(t =>
+            `<span class="badge badge-blue" style="font-size:.7rem">${esc(t)}</span>`).join("") : "";
+
+          let detailHTML = "";
+          if (d) {
+            const rows = [["Title",d.title],["Description",d.description],["Author",d.author],
+              ["Language",d.language],["Charset",d.charset],["Canonical",d.canonical]]
+              .filter(([,v])=>v);
+            const ogRows = Object.entries(d.og||{});
+            const overviewHTML = `
+              <div class="card"><div class="card-title">Meta Tags</div>
+                <div class="meta-grid">${rows.map(([k,v])=>`<div class="meta-cell"><div class="meta-key">${esc(k)}</div><div class="meta-val">${esc(v)}</div></div>`).join("")}</div>
+              </div>
+              ${ogRows.length?`<div class="card"><div class="card-title">Open Graph</div><div class="meta-grid">${ogRows.map(([k,v])=>`<div class="meta-cell"><div class="meta-key">og:${esc(k)}</div><div class="meta-val">${esc(v)}</div></div>`).join("")}</div></div>`:""}`;
+
+            const scores = Object.entries(d.topic_scores||{});
+            const maxS = scores.length ? Math.max(...scores.map(([,s])=>s)) : 1;
+            const topicsHTML = scores.length ? `
+              <div class="card"><div class="card-title">Page Category — <span class="badge badge-blue">${esc(d.page_category)}</span></div></div>
+              <div class="card"><div class="card-title">Topic Scores</div>
+                <div class="topic-list">${scores.map(([t,s])=>`
+                  <div class="topic-row">
+                    <div class="topic-name">${esc(t)}</div>
+                    <div class="topic-bar-wrap"><div class="topic-bar" style="width:${Math.round((s/maxS)*100)}%;background:${colorBar(s/maxS)}"></div></div>
+                    <div class="topic-pct">${Math.round(s*100)}%</div>
+                  </div>`).join("")}
+                </div>
+              </div>` : `<div class="card"><div style="color:var(--muted)">No topics detected.</div></div>`;
+
+            const links = d.links||[];
+            const linksHTML = `<div class="card"><div class="card-title">${links.length} Links</div>
+              ${links.length?`<div style="overflow:auto"><table class="link-table">
+                <thead><tr><th>URL</th><th>Text</th><th>Type</th></tr></thead>
+                <tbody>${links.slice(0,100).map(l=>`<tr>
+                  <td><a href="${esc(l.href)}" target="_blank" style="color:var(--accent)">${esc(l.href.length>60?l.href.slice(0,60)+"…":l.href)}</a></td>
+                  <td style="color:var(--muted)">${esc(l.text.slice(0,60))}</td>
+                  <td><span class="ext-badge ${l.is_external?"ext-yes":"ext-no"}">${l.is_external?"external":"internal"}</span></td>
+                </tr>`).join("")}</tbody>
+              </table></div>`:
+              `<div style="color:var(--muted)">No links.</div>`}
+            </div>`;
+
+            const rawHTML = `<div class="json-out"><pre>${esc(JSON.stringify(d, null, 2))}</pre></div>`;
+
+            detailHTML = `
+              <div class="batch-detail">
+                <div class="batch-tabs">
+                  <div class="batch-tab active" data-bidx="d${idx}" data-btab="overview">Overview</div>
+                  <div class="batch-tab" data-bidx="d${idx}" data-btab="topics">Topics</div>
+                  <div class="batch-tab" data-bidx="d${idx}" data-btab="links">Links</div>
+                  <div class="batch-tab" data-bidx="d${idx}" data-btab="raw">Raw JSON</div>
+                </div>
+                <div class="batch-panel active" id="bp-d${idx}-overview">${overviewHTML}</div>
+                <div class="batch-panel" id="bp-d${idx}-topics">${topicsHTML}</div>
+                <div class="batch-panel" id="bp-d${idx}-links">${linksHTML}</div>
+                <div class="batch-panel" id="bp-d${idx}-raw">${rawHTML}</div>
+              </div>`;
+          }
+
+          return `<div class="batch-item" data-bidx="d${idx}">
+            <div class="batch-dot ${dotClass}"></div>
+            <div style="flex:1;min-width:0">
+              <div class="batch-title">${esc(d?.title || item.error || item.url)}</div>
+              <div class="batch-url">${esc(item.url)}</div>
+              ${d ? `<div class="batch-meta">
+                <span class="badge badge-blue">${esc(d.page_category)}</span>
+                <span class="badge badge-green">HTTP ${d.status_code}</span>
+                ${item.status==="cached"?'<span class="badge badge-cache">⚡ cached</span>':""}
+                ${topics}
+              </div>` : `<div class="batch-meta"><span style="color:var(--err);font-size:.8rem">${esc(item.error||"")}</span></div>`}
+              ${detailHTML}
+            </div>
+            ${d ? `<div class="batch-chevron">▾</div>` : ""}
+          </div>`;
+        }).join("");
+
+        return `<div class="depth-group">
+          <div class="depth-header">
+            <span class="depth-badge ${depClass}">${dep}</span>
+            Depth ${dep} — ${byDepth[dep].length} page${byDepth[dep].length!==1?"s":""}
+          </div>
+          ${items}
+        </div>`;
+      }).join("");
+
+    document.getElementById("deep-result").style.display = "block";
+  } catch (err) {
+    banner("deep-banner", String(err), "err");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg> Start Crawl`;
+  }
+});
+
+/* deep crawl item expand / tab switching — reuses the same delegated handler on #deep-list */
+document.getElementById("deep-list").addEventListener("click", e => {
+  const tab = e.target.closest(".batch-tab");
+  if (tab) {
+    const idx  = tab.dataset.bidx;
+    const name = tab.dataset.btab;
+    tab.closest(".batch-tabs").querySelectorAll(".batch-tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    tab.closest(".batch-detail").querySelectorAll(".batch-panel").forEach(p => p.classList.remove("active"));
+    document.getElementById(`bp-${idx}-${name}`).classList.add("active");
+    return;
+  }
+  if (e.target.closest(".batch-detail")) return;
+  const item = e.target.closest(".batch-item[data-bidx]");
+  if (item) item.classList.toggle("open");
 });
 
 /* ──────────────────────────────────────────────────────────────
