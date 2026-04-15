@@ -56,6 +56,12 @@ async def crawl_batch(
     follow_redirects: bool = True,
     concurrency: int = 5,
 ) -> BatchCrawlResponse:
+    """Crawl a list of URLs concurrently, returning results in input order.
+
+    URLs already in cache are returned immediately without acquiring the semaphore.
+    Per-URL errors are captured as BatchResultItem(status=error) rather than raised,
+    so a single failed URL never aborts the rest of the batch.
+    """
     t0 = time.perf_counter()
     sem = asyncio.Semaphore(concurrency)
 

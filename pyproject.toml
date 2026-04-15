@@ -1,0 +1,38 @@
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "UP007",  # X | Y union syntax — keeping Optional for py39 compat
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["crawler"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["crawler"]
+omit = [
+    "crawler/http_fetch.py",
+    "crawler/schemas.py",
+    "crawler/cache.py",
+    "crawler/batch.py",
+    "crawler/async_fetch.py",
+    "crawler/crawl_workflow.py",
+    "crawler/html_metadata.py",
+    "crawler/topic_scoring.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

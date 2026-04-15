@@ -18,6 +18,12 @@ _SOFT = {401, 403, 406, 429}
 
 
 def crawl_url(url: str, *, timeout: float = 45.0, follow_redirects: bool = True) -> PageMetadata:
+    """Fetch a single URL, parse its HTML, classify topics, and return PageMetadata.
+
+    Raises UpstreamCrawlError on network failures or unrecoverable HTTP errors.
+    Soft errors (401, 403, 406, 429) with HTML content are parsed and returned
+    rather than raised — the description field notes the gated status.
+    """
     t0 = time.perf_counter()
     fr = fetch_page(url, timeout=timeout, follow_redirects=follow_redirects)
     duration = round(time.perf_counter() - t0, 3)
