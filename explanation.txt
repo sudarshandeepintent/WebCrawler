@@ -13,16 +13,25 @@ page, pulls out all the useful metadata from the HTML, figures out
 what the page is about (topics and category), and returns everything
 as structured JSON.
 
-On top of the basic crawler, I added three more things that I felt
+On top of the basic scraper, I added four more things that I felt
 made it production-ready:
 
   1. A browser dashboard UI so anyone can use it without touching curl
   2. Async batch crawling so you can submit up to 50 URLs at once
   3. A caching layer (in-memory by default, Redis for production) so
      repeated crawls for the same URL are instant
+  4. A true BFS deep crawler that starts at a seed URL and follows
+     links automatically — this is what actually makes it a crawler
+     and not just a scraper
 
 I deployed the whole thing to Google Cloud Run and connected it to
 an Upstash Redis instance for the cache.
+
+One thing I want to be upfront about: the first three features make
+this a scraper with some crawler-like additions. The fourth one —
+the BFS deep crawl — is what pushes it into proper web crawler
+territory. Without it, I was just fetching URLs the user explicitly
+gave me. Now the system can discover pages on its own.
 
 
 --------------------------------------------------------------------
@@ -47,7 +56,10 @@ I deliberately kept the code layered so each piece has one job:
                      and a page category. Again, pure logic, no I/O.
 
   services/        — orchestrates the above: fetch → parse → classify
-                     → cache. This is where the workflow lives.
+                     → cache. Three services live here:
+                       crawl_service.py     — single URL workflow
+                       batch_service.py     — concurrent batch with semaphore
+                       deep_crawl_service.py — BFS crawler with frontier queue
 
   infrastructure/  — the cache implementations. MemoryCache for local
                      dev and single-instance deployments, RedisCache
@@ -264,7 +276,105 @@ SPACE COMPLEXITY — Batch Crawling:
 
 
 --------------------------------------------------------------------
-6. WAF BYPASS — WHY I NEEDED IT
+6. THE BFS DEEP CRAWLER
+--------------------------------------------------------------------
+
+This was the last major piece I added and honestly the most
+interesting one to build. The idea is simple to explain but has a
+few non-obvious details when you actually implement it.
+
+The algorithm:
+
+  I use Breadth-First Search. The reason I picked BFS over DFS is
+  that BFS processes all pages at depth 1 before moving to depth 2.
+  This means shallower (usually more important) pages always get
+  crawled first. If the user sets max_pages=10, they get the top
+  10 most-reachable pages, not 10 pages from one deep branch of
+  the site.
+
+  The frontier is a list of (url, depth) pairs. I process it one
+  depth level at a time — I fetch all URLs at the current depth
+  concurrently (using the same semaphore pattern as batch), collect
+  all the links from those pages, filter them, and that becomes the
+  next level.
+
+The visited set:
+
+  Every URL that gets added to the fetch queue is immediately added
+  to a visited set. This is important — I add it when it's queued,
+  not when it's fetched. Without this, the same URL could appear in
+  multiple pages' link lists and get added to the frontier multiple
+  times before any of them get processed.
+
+  The visited set is just a Python set(), so membership checks are
+  O(1). This is the thing that prevents infinite loops — without it,
+  two pages linking to each other would keep queueing each other
+  forever.
+
+URL normalization:
+
+  Before adding any URL to the visited set or the frontier, I
+  normalize it. Two things I handle:
+
+    1. Strip the fragment — https://example.com/page#section and
+       https://example.com/page point to the same page. The fragment
+       is only handled by the browser (scroll position), the server
+       returns the same HTML either way.
+
+    2. Strip trailing slashes — /about and /about/ are typically the
+       same page. Without this, both would get crawled and the visited
+       set wouldn't catch the duplicate.
+
+  I deliberately keep query strings as-is since they often represent
+  genuinely different content (paginated results, search filters, etc).
+
+Domain scoping:
+
+  When stay_on_domain is True, any link pointing to a different
+  domain is skipped. I also handle the www case — if the seed URL
+  is rei.com, links to www.rei.com should still be followed, and
+  vice versa. My _same_domain() helper checks both directions so
+  you don't accidentally skip half the site just because some pages
+  link with www and some without.
+
+How caching interacts with deep crawl:
+
+  Before acquiring the semaphore for a fetch, I check the cache.
+  If the URL is already cached, I return the cached result and
+  extract its links for the frontier — no network call needed.
+  This means running a deep crawl twice on the same site is much
+  faster the second time, since most pages will be cache hits.
+
+TIME COMPLEXITY — Deep Crawl:
+
+  Let P = total pages crawled, D = max_depth, C = concurrency,
+  T_avg = average fetch + parse + classify time per page.
+
+  Wall-clock time (with concurrency):
+    O(D × ceil(P_per_level / C) × T_avg)
+    In the worst case (all pages at one level): O(ceil(P/C) × T_avg)
+    In practice much faster because cache hits return immediately.
+
+  BFS frontier processing:
+    Each URL is added to visited once → O(P) total
+    Each link is checked against visited → O(links_total) = O(P × L_avg)
+    where L_avg = average links per page
+
+  URL normalization per URL: O(len(url)), effectively O(1)
+
+  Overall: O(P × L_avg) dominated by link processing across all pages
+
+SPACE COMPLEXITY — Deep Crawl:
+
+  visited set: O(P) — one entry per crawled URL
+  frontier (next_level list): O(P) worst case, usually O(P/D) per level
+  results list: O(P × M) where M = avg serialized PageMetadata size
+  semaphore: O(1)
+  Overall: O(P × M)
+
+
+--------------------------------------------------------------------
+7. WAF BYPASS — WHY I NEEDED IT
 --------------------------------------------------------------------
 
 Early on, every request to sites like REI.com or Amazon returned
@@ -287,7 +397,7 @@ responses with exponential backoff retries.
 
 
 --------------------------------------------------------------------
-7. HTML PARSING
+8. HTML PARSING
 --------------------------------------------------------------------
 
 I used BeautifulSoup4 with the lxml parser. My parser extracts:
@@ -326,7 +436,7 @@ SPACE COMPLEXITY — HTML Parsing:
 
 
 --------------------------------------------------------------------
-8. CHALLENGES I FACED AND HOW I SOLVED THEM
+9. CHALLENGES I FACED AND HOW I SOLVED THEM
 --------------------------------------------------------------------
 
 WAF-protected sites (403 errors):
@@ -367,43 +477,83 @@ Stale Docker image (404 on new routes):
   Run which image to use — it does not rebuild the image. I now always
   run builds submit before deploy.
 
+Deep crawl — visited set timing:
+  My first version of the BFS added URLs to the visited set after
+  fetching them, not when queuing them. The problem: if page A and
+  page B both link to page C, and A and B are fetched in the same
+  level concurrently, C gets added to the frontier twice before either
+  fetch completes. By the time both finish, C gets fetched twice.
+  Fixing this was simple — add to visited when the URL is queued,
+  not when it's fetched.
 
---------------------------------------------------------------------
-9. WHAT I WOULD IMPROVE GIVEN MORE TIME
---------------------------------------------------------------------
-
-  - Add a proper job queue (e.g., Celery + Redis) for very large batch
-    jobs so they don't block the HTTP request for minutes
-  - Persistent crawl history stored in a database (Cloud Spanner or
-    PostgreSQL) so you can look up past results without re-crawling
-  - Rate limiting per IP on the API endpoints
-  - Smarter text extraction using readability/trafilatura to get just
-    the main article content, not the whole page
-  - JavaScript rendering support (Playwright/Puppeteer) for SPAs that
-    don't serve content in initial HTML
-  - More topic categories and better vocabulary coverage — 16 topics
-    with ~250 keywords is enough for demos but a real product would
-    need more coverage
+Deep crawl — www vs non-www breaking domain scope:
+  When I set stay_on_domain=True with seed rei.com, the crawler was
+  skipping links to www.rei.com because the netloc didn't match
+  exactly. Half the site was being ignored. I wrote _same_domain()
+  to check both directions — whether one is the www version of the
+  other — which fixed it.
 
 
 --------------------------------------------------------------------
-10. SUMMARY TABLE — TIME AND SPACE COMPLEXITY
+10. WHAT I WOULD IMPROVE GIVEN MORE TIME
 --------------------------------------------------------------------
 
-Component                   | Time Complexity        | Space Complexity
------------------------------|------------------------|------------------
-_tokenize(text)             | O(n)                   | O(T)
-_build_kw_index() [startup] | O(K)                   | O(K)
-_score_topics(freq, total)  | O(U)                   | O(16) ≈ O(1)
-classify_page(meta)         | O(n)                   | O(T)
-parse_page(fetch_result)    | O(H)                   | O(H)
-MemoryCache.get(url)        | O(M) amortized O(1)    | —
-MemoryCache.set(url, meta)  | O(N) worst, O(1) avg   | O(N × M)
-MemoryCache (total storage) | —                      | O(N × M)
-RedisCache.get / set        | O(M) + network         | O(1) in-process
-crawl_url (single)          | O(H + n)               | O(H + T)
-crawl_batch (n URLs)        | O(ceil(n/c) × T_avg)   | O(n × M)
-asyncio.gather overhead     | O(n)                   | O(n)
+  - robots.txt support in the deep crawler — right now it ignores
+    robots.txt completely, which is fine for demos but not for
+    anything hitting real production sites. I'd parse it with
+    urllib.robotparser before queuing each URL.
+
+  - Crawl delay / politeness — related to the above. Hitting a site
+    with 10 concurrent requests is aggressive. I'd add a per-domain
+    delay (even 0.5s between requests to the same host) to be a
+    better citizen.
+
+  - Async job queue for long-running deep crawls — right now a deep
+    crawl with max_pages=100 holds an HTTP connection open for the
+    whole duration. A proper setup would be to start the job, return
+    a job ID immediately, and let the client poll for results. Could
+    do this with Celery + Redis or just a simple background task
+    with FastAPI's BackgroundTasks.
+
+  - Persistent crawl history in a database — so you can query past
+    crawls without re-running them. PostgreSQL with a simple pages
+    table (url, crawled_at, metadata JSON) would work fine.
+
+  - JavaScript rendering — most SPAs don't return useful HTML in the
+    initial response. Playwright in headless mode would let me
+    render the page fully before parsing. The tricky part is the
+    resource cost — a headless browser per request doesn't scale
+    well on Cloud Run.
+
+  - Better topic vocabulary — 16 topics with ~250 keywords is
+    enough for demos but the classifier misses a lot. I'd want at
+    least 50 topics and curated keyword lists rather than hand-
+    picked ones.
+
+
+--------------------------------------------------------------------
+11. SUMMARY TABLE — TIME AND SPACE COMPLEXITY
+--------------------------------------------------------------------
+
+Component                    | Time Complexity         | Space Complexity
+------------------------------|-------------------------|-------------------
+_tokenize(text)              | O(n)                    | O(T)
+_build_kw_index() [startup]  | O(K)                    | O(K)
+_score_topics(freq, total)   | O(U)                    | O(16) ≈ O(1)
+classify_page(meta)          | O(n)                    | O(T)
+parse_page(fetch_result)     | O(H)                    | O(H)
+MemoryCache.get(url)         | O(M) amortized O(1)     | —
+MemoryCache.set(url, meta)   | O(N) worst, O(1) avg    | O(N × M)
+MemoryCache (total storage)  | —                       | O(N × M)
+RedisCache.get / set         | O(M) + network          | O(1) in-process
+crawl_url (single)           | O(H + n)                | O(H + T)
+crawl_batch (n URLs)         | O(ceil(n/c) × T_avg)    | O(n × M)
+asyncio.gather overhead      | O(n)                    | O(n)
+_normalize(url)              | O(len(url)) ≈ O(1)      | O(1)
+_same_domain(url, host)      | O(1)                    | O(1)
+visited set lookup/insert    | O(1) average            | O(P)
+BFS frontier (next_level)    | O(P × L_avg)            | O(P)
+deep_crawl (P pages)         | O(P × L_avg + D×T_avg)  | O(P × M)
 
   n = character count of page text
   T = number of tokens in the page text
@@ -411,8 +561,12 @@ asyncio.gather overhead     | O(n)                   | O(n)
   U = unique tokens that matched a keyword (U << T)
   H = HTML document size (bytes/chars)
   M = serialized PageMetadata size (~5–20 KB per page)
-  N = number of entries in the cache (max 500)
-  c = concurrency limit for batch crawl (default 5, max 20)
+  N = number of entries in the memory cache (max 500)
+  c = concurrency limit (batch: default 5/max 20, deep: default 3/max 10)
+  P = total pages crawled in a deep crawl session
+  L_avg = average number of links per page
+  D = max_depth setting
+  T_avg = average wall-clock time per page fetch + parse + classify
 
 
 ====================================================================
