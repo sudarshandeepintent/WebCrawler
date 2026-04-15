@@ -423,4 +423,11 @@ WebCrawler/
 
 Some ScreenShots ->
 <img width="1666" height="794" alt="Screenshot 2026-04-15 at 4 03 03 PM" src="https://github.com/user-attachments/assets/34782fd5-c7b4-4216-aa91-cb8b8e4f8153" />
+<img width="1600" height="773" alt="Screenshot 2026-04-15 at 4 04 44 PM" src="https://github.com/user-attachments/assets/0d0899e7-69e4-4d77-b1e3-b923fa00ea48" />
+<img width="1577" height="822" alt="Screenshot 2026-04-15 at 4 05 22 PM" src="https://github.com/user-attachments/assets/53a12edc-c011-4a64-9c0f-a384116326c0" />
+<img width="1660" height="838" alt="Screenshot 2026-04-15 at 4 05 39 PM" src="https://github.com/user-attachments/assets/deb5c455-9058-4f86-bae2-e1dc1cc19466" />
+<img width="1547" height="810" alt="Screenshot 2026-04-15 at 4 05 56 PM" src="https://github.com/user-attachments/assets/52c43050-0624-44f3-abed-18d9f8be759d" />
+
+
+
 
