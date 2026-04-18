@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from crawler.cache import MemoryCache
-from crawler.schemas import BatchCrawlRequest, PageMetadata, UrlStatus
+from crawler.infrastructure.cache import MemoryCache
+from crawler.models.schemas import BatchCrawlRequest, PageMetadata, UrlStatus
 from main import app
 
 client = TestClient(app)
@@ -147,7 +147,7 @@ class TestMemoryCache:
 class TestBatchCrawl:
 
     def _mock_async_fetch(self, html=SAMPLE_HTML, status=200):
-        from crawler.http_fetch import FetchResult
+        from crawler.domain.fetch_result import FetchResult
         result = FetchResult(
             url="https://example.com",
             final_url="https://example.com",
@@ -159,7 +159,7 @@ class TestBatchCrawl:
 
     def test_batch_success(self):
         urls = ["https://example.com/1", "https://example.com/2"]
-        from crawler.http_fetch import FetchResult
+        from crawler.domain.fetch_result import FetchResult
         def make_result(url, *args, **kwargs):
             return asyncio.coroutine(lambda: FetchResult(
                 url=url, final_url=url, status_code=200,
@@ -172,7 +172,7 @@ class TestBatchCrawl:
         with patch("crawler.services.batch_service.async_fetch_page", side_effect=fake_fetch), \
              patch("crawler.services.batch_service.cache.get", return_value=None), \
              patch("crawler.services.batch_service.cache.set"):
-            from crawler.batch import crawl_batch
+            from crawler.services.batch_service import crawl_batch
             result = asyncio.get_event_loop().run_until_complete(
                 crawl_batch(urls, concurrency=2)
             )
@@ -182,7 +182,7 @@ class TestBatchCrawl:
         assert result.cached == 0
 
     def test_batch_partial_failure(self):
-        from crawler.http_fetch import FetchResult
+        from crawler.domain.fetch_result import FetchResult
         async def fake_fetch(url, **kw):
             if "bad" in url:
                 return FetchResult(url=url, final_url=url, status_code=0,
@@ -194,7 +194,7 @@ class TestBatchCrawl:
         with patch("crawler.services.batch_service.async_fetch_page", side_effect=fake_fetch), \
              patch("crawler.services.batch_service.cache.get", return_value=None), \
              patch("crawler.services.batch_service.cache.set"):
-            from crawler.batch import crawl_batch
+            from crawler.services.batch_service import crawl_batch
             result = asyncio.get_event_loop().run_until_complete(
                 crawl_batch(urls, concurrency=2)
             )
@@ -207,7 +207,7 @@ class TestBatchCrawl:
         cached_meta.from_cache = True
 
         with patch("crawler.services.batch_service.cache.get", return_value=cached_meta):
-            from crawler.batch import crawl_batch
+            from crawler.services.batch_service import crawl_batch
             result = asyncio.get_event_loop().run_until_complete(
                 crawl_batch(["https://cached.com"], concurrency=1)
             )
@@ -217,7 +217,7 @@ class TestBatchCrawl:
 
     def test_batch_order_preserved(self):
         """Results must come back in the same order as the input URLs."""
-        from crawler.http_fetch import FetchResult
+        from crawler.domain.fetch_result import FetchResult
         async def fake_fetch(url, **kw):
             await asyncio.sleep(0.01)     # simulate variable latency
             return FetchResult(url=url, final_url=url, status_code=200,
@@ -227,7 +227,7 @@ class TestBatchCrawl:
         with patch("crawler.services.batch_service.async_fetch_page", side_effect=fake_fetch), \
              patch("crawler.services.batch_service.cache.get", return_value=None), \
              patch("crawler.services.batch_service.cache.set"):
-            from crawler.batch import crawl_batch
+            from crawler.services.batch_service import crawl_batch
             result = asyncio.get_event_loop().run_until_complete(
                 crawl_batch(urls, concurrency=5)
             )
@@ -235,14 +235,14 @@ class TestBatchCrawl:
             assert item.url == urls[i], f"Order mismatch at index {i}"
 
     def test_batch_duration_tracked(self):
-        from crawler.http_fetch import FetchResult
+        from crawler.domain.fetch_result import FetchResult
         async def fake_fetch(url, **kw):
             return FetchResult(url=url, final_url=url, status_code=200,
                                html=SAMPLE_HTML, content_type="text/html")
         with patch("crawler.services.batch_service.async_fetch_page", side_effect=fake_fetch), \
              patch("crawler.services.batch_service.cache.get", return_value=None), \
              patch("crawler.services.batch_service.cache.set"):
-            from crawler.batch import crawl_batch
+            from crawler.services.batch_service import crawl_batch
             result = asyncio.get_event_loop().run_until_complete(
                 crawl_batch(["https://example.com"], concurrency=1)
             )
@@ -256,7 +256,7 @@ class TestBatchCrawl:
 class TestBatchAPI:
 
     def _mock_batch(self, urls, succeeded=True):
-        from crawler.schemas import BatchCrawlResponse, BatchResultItem
+        from crawler.models.schemas import BatchCrawlResponse, BatchResultItem
         items = [
             BatchResultItem(
                 url=url,
@@ -355,7 +355,7 @@ class TestCacheAPI:
 
     def test_single_crawl_populates_cache(self):
         """After a successful /crawl, a second call should be served from cache."""
-        from crawler.http_fetch import FetchResult
+        from crawler.domain.fetch_result import FetchResult
         fetch_result = FetchResult(
             url="https://example.com/cache-test",
             final_url="https://example.com/cache-test",
@@ -378,7 +378,7 @@ class TestCacheAPI:
 
     def test_single_crawl_bypass_cache(self):
         """use_cache=false must skip the cache."""
-        from crawler.http_fetch import FetchResult
+        from crawler.domain.fetch_result import FetchResult
         fetch_result = FetchResult(
             url="https://example.com/no-cache",
             final_url="https://example.com/no-cache",
