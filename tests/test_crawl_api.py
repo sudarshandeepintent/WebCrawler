@@ -7,9 +7,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from crawler.html_metadata import parse_page
-from crawler.http_fetch import FetchResult
-from crawler.topic_scoring import _tokenize, classify_page
+from crawler.parsing.extract import parse_page
+from crawler.domain.fetch_result import FetchResult
+from crawler.classification.topics import _tokenize, classify_page
 
 SAMPLE_HTML = """<!DOCTYPE html>
 <html lang="en">

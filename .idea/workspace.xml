@@ -4,7 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="12f3d5f7-4bea-4a05-9810-46107065c765" name="Changes" comment="Mini Webcrawler" />
+    <list default="true" id="12f3d5f7-4bea-4a05-9810-46107065c765" name="Changes" comment="chore: add Makefile, env example, pyproject config and public API docstrings">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -28,7 +30,7 @@
   "keyToString": {
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "doc-strings",
     "kotlin-language-version-configured": "true",
     "last_opened_file_path": "/Users/sudarshansunilmaskare/IdeaProjects/WebCrawler"
   }
@@ -99,11 +101,125 @@
       <option name="project" value="LOCAL" />
       <updated>1776176797079</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Resolve 403 Error for restrictive websites">
+      <option name="closed" value="true" />
+      <created>1776179516942</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1776179516942</updated>
+    </task>
+    <task id="LOCAL-00003" summary="Resolve 403 Error for restrictive websites">
+      <option name="closed" value="true" />
+      <created>1776179847746</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1776179847746</updated>
+    </task>
+    <task id="LOCAL-00004" summary="Implement Design pattern, making it scalable">
+      <option name="closed" value="true" />
+      <created>1776186013674</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1776186013675</updated>
+    </task>
+    <task id="LOCAL-00005" summary="Fix cors issue">
+      <option name="closed" value="true" />
+      <created>1776187141647</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1776187141647</updated>
+    </task>
+    <task id="LOCAL-00006" summary="Enhance ui for web crawler and solve cache hit issue">
+      <option name="closed" value="true" />
+      <created>1776188178259</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1776188178259</updated>
+    </task>
+    <task id="LOCAL-00007" summary="Fix batch crawling ui issue">
+      <option name="closed" value="true" />
+      <created>1776188769756</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1776188769756</updated>
+    </task>
+    <task id="LOCAL-00008" summary="Added Comments">
+      <option name="closed" value="true" />
+      <created>1776190229557</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1776190229557</updated>
+    </task>
+    <task id="LOCAL-00009" summary="Added Comments">
+      <option name="closed" value="true" />
+      <created>1776190471771</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1776190471771</updated>
+    </task>
+    <task id="LOCAL-00010" summary="Added Comments">
+      <option name="closed" value="true" />
+      <created>1776190582698</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1776190582698</updated>
+    </task>
+    <task id="LOCAL-00011" summary="Enhancement - created deep crawl using existing code">
+      <option name="closed" value="true" />
+      <created>1776231849713</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1776231849713</updated>
+    </task>
+    <task id="LOCAL-00012" summary="Add user manual and update readme file">
+      <option name="closed" value="true" />
+      <created>1776232862657</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1776232862657</updated>
+    </task>
+    <task id="LOCAL-00013" summary="Update Explanation.txt file">
+      <option name="closed" value="true" />
+      <created>1776233929135</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1776233929135</updated>
+    </task>
+    <task id="LOCAL-00014" summary="chore: add Makefile, env example, pyproject config and public API docstrings">
+      <option name="closed" value="true" />
+      <created>1776272777795</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1776272777795</updated>
+    </task>
+    <option name="localTasksCounter" value="15" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Mini Webcrawler" />
-    <option name="LAST_COMMIT_MESSAGE" value="Mini Webcrawler" />
+    <MESSAGE value="Resolve 403 Error for restrictive websites" />
+    <MESSAGE value="Implement Design pattern, making it scalable" />
+    <MESSAGE value="Fix cors issue" />
+    <MESSAGE value="Enhance ui for web crawler and solve cache hit issue" />
+    <MESSAGE value="Fix batch crawling ui issue" />
+    <MESSAGE value="Added Comments" />
+    <MESSAGE value="Enhancement - created deep crawl using existing code" />
+    <MESSAGE value="Add user manual and update readme file" />
+    <MESSAGE value="Update Explanation.txt file" />
+    <MESSAGE value="chore: add Makefile, env example, pyproject config and public API docstrings" />
+    <option name="LAST_COMMIT_MESSAGE" value="chore: add Makefile, env example, pyproject config and public API docstrings" />
   </component>
 </project>
