@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 class CrawlRequest(BaseModel):
     url: HttpUrl
-    timeout: float = Field(default=45.0, ge=1.0, le=120.0)  # capped at 120s — Cloud Run max is 3600 but I don't want runaway requests
+    timeout: float = Field(default=45.0, ge=1.0, le=120.0)  
     follow_redirects: bool = True
 
 

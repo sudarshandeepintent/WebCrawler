@@ -35,10 +35,9 @@ def crawl_one(
     request: CrawlRequest,
     use_cache: bool = Query(default=True),
 ) -> PageMetadata:
-    url = str(request.url)
+    url = str(request.url) #normalising the url
 
-    # check cache first — skip entirely if use_cache=false (useful for testing
-    # or when you know the page has changed since the last crawl)
+    # check cache first — skip entirely if use_cache=false
     if use_cache:
         c = cache.get(url)
         if c is not None:

@@ -17,8 +17,7 @@ logger = logging.getLogger(__name__)
 
 def _url_key(url: str) -> str:
     # hash the URL so keys are always a fixed length regardless of how long or
-    # query-string-heavy the URL is. the prefix lets me clear only my keys in Redis
-    # without nuking anything else that might be in the same database.
+    # query-string-heavy the URL is.
     return settings.cache_prefix + hashlib.sha256(url.encode()).hexdigest()
 
 
@@ -29,7 +28,6 @@ def _now_iso() -> str:
 class _MemEntry:
     # lightweight slot class to avoid dict overhead per entry.
     # storing serialized JSON rather than the PageMetadata object itself
-    # means I don't have to worry about mutation — each get() deserializes fresh.
     __slots__ = ("data", "expires_at", "cached_at")
 
     def __init__(self, data: str, ttl: int) -> None:
@@ -40,8 +38,6 @@ class _MemEntry:
 
 class MemoryCache:
     # in-process LRU cache backed by OrderedDict.
-    # OrderedDict preserves insertion order and has O(1) move_to_end,
-    # which is exactly what I need for LRU without any extra library.
     def __init__(self, ttl: int | None = None, max_size: int | None = None) -> None:
         self._ttl = ttl if ttl is not None else settings.cache_ttl
         self._max = max_size if max_size is not None else settings.cache_max
@@ -50,7 +46,6 @@ class MemoryCache:
 
     def _sweep(self) -> None:
         # remove all expired entries in one pass.
-        # called inside set() so stale entries don't sit around taking up slots.
         now = time.monotonic()
         dead = [k for k, v in self._store.items() if v.expires_at <= now]
         for k in dead:
@@ -58,7 +53,6 @@ class MemoryCache:
 
     def _trim(self) -> None:
         # evict from the front (least recently used) until we're under max_size.
-        # move_to_end on every get() keeps the most-recently-used entries at the back.
         while len(self._store) >= self._max:
             self._store.popitem(last=False)
 
@@ -105,10 +99,6 @@ class MemoryCache:
 
 
 class RedisCache:
-    # Redis-backed cache for production / multi-instance deployments.
-    # with Cloud Run potentially running multiple containers, MemoryCache means
-    # each instance has its own isolated cache. Redis fixes that — one shared
-    # cache across all instances, and it survives redeployments too.
     def __init__(self, redis_url: str, ttl: int | None = None) -> None:
         import redis
 

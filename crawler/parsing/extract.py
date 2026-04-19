@@ -41,11 +41,7 @@ def parse_page(fetch_result: FetchResult) -> PageMetadata:
     """Parse raw HTML from a FetchResult into a PageMetadata object.
 
     Extracts: title, standard meta tags, Open Graph, Twitter Card, headings
-    (h1–h6), deduplicated links with external flag, images (src + alt),
-    and cleaned body text with word count.
-
-    Body text skips script/style/nav/header/footer nodes so the output is
-    suitable for topic classification without menu/footer noise.
+    (h1–h6)
     """
     soup = BeautifulSoup(fetch_result.html, "lxml")
     base = fetch_result.final_url  # use final_url so relative links resolve correctly after redirects
@@ -53,7 +49,6 @@ def parse_page(fetch_result: FetchResult) -> PageMetadata:
 
     title = _text(soup.find("title"))
 
-    # try both name= and property= for description — some sites use property instead of name
     description = _meta(soup, name="description") or _meta(soup, property="description")
     keywords = _meta(soup, name="keywords")
     author = _meta(soup, name="author")
@@ -64,8 +59,7 @@ def parse_page(fetch_result: FetchResult) -> PageMetadata:
     if can_link and isinstance(can_link, Tag):
         canonical = can_link.get("href")  # type: ignore[assignment]
 
-    # language is usually on the <html lang="en"> attribute.
-    # falling back to the http-equiv meta tag as a backup.
+
     language = None
     html_el = soup.find("html")
     if html_el and isinstance(html_el, Tag):
